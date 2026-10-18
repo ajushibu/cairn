@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cairn</title>
+<meta name="description" content="A personal index for the paper books you read.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Cairn">
+<link rel="icon" href="icons/favicon-32.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Figtree:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main id="main"></main>
+
+<nav class="tabbar" aria-label="Main">
+  <div class="tb">
+    <button type="button" class="tab" data-act="go" data-to="shelf" id="tabShelf">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h4v16H4z"/><path d="M10 4h4v16h-4z"/><path d="M16.2 5.2l3.6-1 2.2 15.2-3.6 1z"/></svg>
+      <span>Shelf</span>
+    </button>
+    <button type="button" class="tab" data-act="go" data-to="ask" id="tabAsk">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span>Ask</span>
+    </button>
+    <button type="button" class="tab" data-act="mark-new">
+      <span class="mk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg></span>
+      <span>Mark<span class="sr"> a page</span></span>
+    </button>
+    <button type="button" class="tab" data-act="go" data-to="revisit" id="tabRevisit">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      <span>Revisit</span>
+      <b class="badge" id="rvBadge" hidden></b>
+    </button>
+  </div>
+</nav>
+
+<div class="bar" id="bookBar" hidden></div>
+
+<dialog class="sheet" id="sheetMark" aria-labelledby="markH">
+  <form id="markForm" class="sheet-in" novalidate>
+    <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="markH">Mark a page</h2><button type="submit" class="link strong">Add</button></div>
+    <fieldset class="field"><legend>Book</legend><div class="chips" id="markBooks"></div></fieldset>
+    <div class="field"><label class="lbl" for="markPage">Page</label><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"></div>
+    <div class="field"><label class="lbl" for="markText">In your own words</label><textarea id="markText" class="tx" rows="2" maxlength="280" placeholder="What this page says, in one line"></textarea><p class="help" id="markHint">Short beats complete. Six to twelve words is plenty.</p></div>
+    <p class="err-msg" id="markErr" role="alert"></p>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="sheetBook" aria-labelledby="bookH">
+  <form id="bookForm" class="sheet-in" novalidate>
+    <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="bookH">New book</h2><button type="submit" class="link strong" id="bookSave">Add</button></div>
+    <div class="field"><label class="lbl" for="bTitle">Title</label><input id="bTitle" class="input" autocomplete="off" maxlength="140"></div>
+    <div class="field"><label class="lbl" for="bAuthor">Author</label><input id="bAuthor" class="input" autocomplete="off" maxlength="100"></div>
+    <div class="field"><label class="lbl" for="bPages">Total pages (optional)</label><input id="bPages" class="input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="width: 9ch"><p class="help">Shows how far into the book your index reaches.</p></div>
+    <fieldset class="field"><legend>Colour</legend><div class="swatches" id="bColors"></div></fieldset>
+    <p class="err-msg" id="bookErr" role="alert"></p>
+    <div id="bookDanger"></div>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="sheetDetail" aria-label="Mark"><div class="sheet-in" id="detailBody"></div></dialog>
+<dialog class="sheet" id="sheetLink" aria-label="This is like that"><div class="sheet-in" id="linkBody"></div></dialog>
+<dialog class="sheet" id="sheetMenu" aria-label="Cairn"><div class="sheet-in" id="menuBody"></div></dialog>
+
+<dialog class="sheet" id="sheetAuth" aria-labelledby="authH">
+  <form id="authForm" class="sheet-in" novalidate>
+    <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="authH">Sign in</h2><button type="submit" class="link strong">Sign in</button></div>
+    <div class="field"><label class="lbl" for="auEmail">Email</label><input id="auEmail" class="input" type="email" autocomplete="email" inputmode="email"></div>
+    <div class="field"><label class="lbl" for="auPass">Password</label><input id="auPass" class="input" type="password" autocomplete="current-password"></div>
+    <p class="auth-note" id="auMsg">Same email and password as margin and recall.</p>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="/config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

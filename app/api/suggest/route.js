@@ -1,5 +1,5 @@
 // POST /api/suggest — points at marks that might be "like" a new one.
-// Body: { from: {id, book, page, text}, others: [{id, book, page, text}] }  →  { ids: [...] }
+// Body: { from: {id, book, page, loc, text}, others: [{id, book, page, loc, text}] }  →  { ids: [...] }
 // Claude only points. It never writes the reason; the reader does that in the app.
 
 import { askClaude, guard, json, parseObject, QUICK_MODEL } from "../../../lib/server";
@@ -17,7 +17,8 @@ Respond with ONLY a JSON object: {"ids":["...","..."]} with the best match first
 const clean = (n) => ({
   id: String(n?.id ?? "").slice(0, 64),
   book: String(n?.book ?? "").slice(0, 160),
-  page: Number.isFinite(+n?.page) ? Math.round(+n.page) : 0,
+  page: Number.isFinite(+n?.page) && +n.page > 0 ? Math.round(+n.page) : null,
+  loc: Number.isFinite(+n?.loc) && +n.loc > 0 ? Math.round(+n.loc) : null,
   text: String(n?.text ?? "").slice(0, 300),
 });
 
@@ -31,8 +32,8 @@ export async function POST(req) {
   const others = (Array.isArray(b?.others) ? b.others : []).map(clean).filter((n) => n.id && n.text && n.id !== from.id).slice(0, 1500);
   if (!from.text || !others.length) return json({ error: "bad_request" }, 400);
 
-  const line = (n) => `${n.id} | ${n.book} | p.${n.page} | ${n.text}`;
-  const prompt = `NEW NOTE\n${line(from)}\n\nOTHER NOTES (id | book | page | note)\n${others.map(line).join("\n")}`;
+  const line = (n) => `${n.id} | ${n.book} | ${n.page ? `p.${n.page}` : n.loc ? `loc ${n.loc}` : "?"} | ${n.text}`;
+  const prompt = `NEW NOTE\n${line(from)}\n\nOTHER NOTES (id | book | page or location | note)\n${others.map(line).join("\n")}`;
 
   const r = await askClaude({ model: QUICK_MODEL(), system: SYSTEM, prompt, maxTokens: 600 });
   if (r.error) return r.error;

@@ -40,6 +40,10 @@
       <span>Revisit</span>
       <b class="badge" id="rvBadge" hidden></b>
     </button>
+    <button type="button" class="tab" data-act="go" data-to="discover" id="tabDiscover">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>
+      <span>Discover</span>
+    </button>
   </div>
 </nav>
 
@@ -49,7 +53,7 @@
   <form id="markForm" class="sheet-in" novalidate>
     <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="markH">Mark a page</h2><button type="submit" class="link strong">Add</button></div>
     <fieldset class="field"><legend>Book</legend><div class="chips" id="markBooks"></div></fieldset>
-    <div class="field"><label class="lbl" for="markPage">Page</label><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"></div>
+    <div class="field"><div class="unit-row"><label class="lbl" for="markPage" id="markPageLbl">Page</label><span id="markUnit"></span></div><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"></div>
     <div class="field"><label class="lbl" for="markText">In your own words</label><textarea id="markText" class="tx" rows="2" maxlength="280" placeholder="What this page says, in one line"></textarea><p class="help" id="markHint">Short beats complete. Six to twelve words is plenty.</p></div>
     <p class="err-msg" id="markErr" role="alert"></p>
   </form>
@@ -60,7 +64,8 @@
     <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="bookH">New book</h2><button type="submit" class="link strong" id="bookSave">Add</button></div>
     <div class="field"><label class="lbl" for="bTitle">Title</label><input id="bTitle" class="input" autocomplete="off" maxlength="140"></div>
     <div class="field"><label class="lbl" for="bAuthor">Author</label><input id="bAuthor" class="input" autocomplete="off" maxlength="100"></div>
-    <div class="field"><label class="lbl" for="bPages">Total pages (optional)</label><input id="bPages" class="input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="width: 9ch"><p class="help">Shows how far into the book your index reaches.</p></div>
+    <fieldset class="field"><legend>Format</legend><div id="bKind"></div></fieldset>
+    <div class="field"><label class="lbl" for="bPages" id="bPagesLbl">Total pages (optional)</label><input id="bPages" class="input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="width: 9ch"><p class="help">Shows how far into the book your index reaches.</p></div>
     <fieldset class="field"><legend>Colour</legend><div class="swatches" id="bColors"></div></fieldset>
     <p class="err-msg" id="bookErr" role="alert"></p>
     <div id="bookDanger"></div>
@@ -69,6 +74,9 @@
 
 <dialog class="sheet" id="sheetDetail" aria-label="Mark"><div class="sheet-in" id="detailBody"></div></dialog>
 <dialog class="sheet" id="sheetLink" aria-label="This is like that"><div class="sheet-in" id="linkBody"></div></dialog>
+<dialog class="sheet" id="sheetImport" aria-label="Import from Kindle"><div class="sheet-in" id="importBody"></div></dialog>
+<input type="file" id="photoInput" accept="image/*" multiple hidden>
+<input type="file" id="clipInput" accept=".txt,.html,.htm,text/plain,text/html" hidden>
 <dialog class="sheet" id="sheetMenu" aria-label="Cairn"><div class="sheet-in" id="menuBody"></div></dialog>
 
 <dialog class="sheet" id="sheetAuth" aria-labelledby="authH">

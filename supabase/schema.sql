@@ -88,3 +88,16 @@ create policy "own cairn marks" on public.cairn_marks
 drop policy if exists "own cairn links" on public.cairn_links;
 create policy "own cairn links" on public.cairn_links
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Kindle (added with Kindle import). Safe to run more than once.
+-- Books are paper or kindle; Kindle books are numbered by location as well as page.
+alter table public.cairn_books add column if not exists kind text not null default 'paper';
+-- A mark can have a page, a location or both, so page may be empty.
+alter table public.cairn_marks alter column page drop not null;
+alter table public.cairn_marks add column if not exists loc int;
+-- The highlighted text, when the mark came from a Kindle highlight.
+alter table public.cairn_marks add column if not exists quote text;
+-- 'kept' marks are in your index; 'inbox' marks are imported highlights still waiting for your line.
+alter table public.cairn_marks add column if not exists status text not null default 'kept';
+-- Where a mark came from: null (typed), 'kindle-photo', 'kindle-clippings' or 'kindle-export'.
+alter table public.cairn_marks add column if not exists source text;

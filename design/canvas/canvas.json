@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-18T17:05:00Z"},
+  "title": "Cairn — UI Directions",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 390, "h": 844, "title": "A · Index — book", "radius": 36},
+    "A-Ask.dc.html": {"x": 0, "y": 964, "w": 390, "h": 844, "title": "A · Index — ask", "radius": 36},
+    "B-Trail.dc.html": {"x": 470, "y": 0, "w": 390, "h": 844, "title": "B · Trail — book", "radius": 36},
+    "B-Link.dc.html": {"x": 470, "y": 964, "w": 390, "h": 844, "title": "B · Trail — link", "radius": 36},
+    "C-Atlas.dc.html": {"x": 940, "y": 0, "w": 390, "h": 844, "title": "C · Atlas — map", "radius": 36},
+    "C-Point.dc.html": {"x": 940, "y": 964, "w": 390, "h": 844, "title": "C · Atlas — point", "radius": 36},
+    "D-Shelf.dc.html": {"x": 1410, "y": 0, "w": 390, "h": 844, "title": "D · Stack — shelf", "radius": 36},
+    "D-Ask.dc.html": {"x": 1410, "y": 964, "w": 390, "h": 844, "title": "D · Stack — ask", "radius": 36}
+  },
+  "order": [
+    "Main.dc.html",
+    "A-Ask.dc.html",
+    "B-Trail.dc.html",
+    "B-Link.dc.html",
+    "C-Atlas.dc.html",
+    "C-Point.dc.html",
+    "D-Shelf.dc.html",
+    "D-Ask.dc.html"
+  ],
+  "notes": {
+    "tA": {"x": 0, "y": -330, "text": "A · Index", "kind": "title1", "maxW": 390},
+    "tB": {"x": 470, "y": -330, "text": "B · Trail", "kind": "title1", "maxW": 390},
+    "tC": {"x": 940, "y": -330, "text": "C · Atlas", "kind": "title1", "maxW": 390},
+    "tD": {"x": 1410, "y": -330, "text": "D · Stack", "kind": "title1", "maxW": 390}
+  },
+  "designSystems": []
+}

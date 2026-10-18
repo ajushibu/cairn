@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Cairn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Figtree:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+/* Cairn styles: same family as Margin and Recall. Colour and type tokens first; dark mode redefines the same tokens. */
+/* Layout: grouped background; the shelf is a grid of colour book tiles; inside a book, one reading column with a glass top bar and a floating glass progress bar; a glass tab bar everywhere else. */
+:root {
+  --grouped: #F2F2F7; --card: #FFFFFF; --raised: #FFFFFF; --thumb: #FFFFFF;
+  --ink: #1C1C1E; --ink2: rgba(60, 60, 67, .72); --ink3: rgba(60, 60, 67, .3);
+  --fill: rgba(118, 118, 128, .12); --fill2: rgba(118, 118, 128, .2); --sep: rgba(60, 60, 67, .16);
+  --glass: rgba(255, 255, 255, .78); --glass-edge: rgba(0, 0, 0, .07);
+  --hud: rgba(28, 28, 30, .92); --hud-fg: #FFFFFF;
+  --err: #FF2D55; --err-ink: #C8102E;
+  --gap: #FF9500; --gap-ink: #A35400; --gap-tint: #FFF4E5;
+  --ok: #34C759; --ok-ink: #1D7A33; --ok-tint: #EAF8ED;
+  --dots: rgba(60, 60, 67, .3);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 10px 30px -14px rgba(0, 0, 0, .22);
+  --bar-shadow: 0 12px 34px rgba(0, 0, 0, .14), 0 0 0 .5px var(--glass-edge);
+  --round: ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif;
+  --text: -apple-system, BlinkMacSystemFont, 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --serif: ui-serif, 'New York', 'Newsreader', Georgia, serif;
+  --tab-h: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grouped: #000000; --card: #1C1C1E; --raised: #2C2C2E; --thumb: #636366;
+    --ink: #FFFFFF; --ink2: rgba(235, 235, 245, .66); --ink3: rgba(235, 235, 245, .3);
+    --fill: rgba(118, 118, 128, .24); --fill2: rgba(118, 118, 128, .36); --sep: rgba(84, 84, 88, .6);
+    --glass: rgba(30, 30, 32, .76); --glass-edge: rgba(255, 255, 255, .09);
+    --hud: rgba(58, 58, 60, .95); --hud-fg: #FFFFFF;
+    --err: #FF375F; --err-ink: #FF6B88;
+    --gap: #FF9F0A; --gap-ink: #FFB547; --gap-tint: rgba(255, 159, 10, .15);
+    --ok: #30D158; --ok-ink: #5BE07E; --ok-tint: rgba(48, 209, 88, .14);
+    --dots: rgba(235, 235, 245, .24);
+    --shadow: 0 0 0 .5px rgba(255, 255, 255, .06);
+    --bar-shadow: 0 12px 34px rgba(0, 0, 0, .5), 0 0 0 .5px var(--glass-edge);
+    color-scheme: dark;
+  }
+  :root:not([data-theme="light"]) [data-acc] { --acc: var(--acc-d); }
+}
+:root[data-theme="dark"] {
+  --grouped: #000000; --card: #1C1C1E; --raised: #2C2C2E; --thumb: #636366;
+  --ink: #FFFFFF; --ink2: rgba(235, 235, 245, .66); --ink3: rgba(235, 235, 245, .3);
+  --fill: rgba(118, 118, 128, .24); --fill2: rgba(118, 118, 128, .36); --sep: rgba(84, 84, 88, .6);
+  --glass: rgba(30, 30, 32, .76); --glass-edge: rgba(255, 255, 255, .09);
+  --hud: rgba(58, 58, 60, .95); --hud-fg: #FFFFFF;
+  --err: #FF375F; --err-ink: #FF6B88;
+  --gap: #FF9F0A; --gap-ink: #FFB547; --gap-tint: rgba(255, 159, 10, .15);
+  --ok: #30D158; --ok-ink: #5BE07E; --ok-tint: rgba(48, 209, 88, .14);
+  --dots: rgba(235, 235, 245, .24);
+  --shadow: 0 0 0 .5px rgba(255, 255, 255, .06);
+  --bar-shadow: 0 12px 34px rgba(0, 0, 0, .5), 0 0 0 .5px var(--glass-edge);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] [data-acc] { --acc: var(--acc-d); }
+[data-acc] { --acc: var(--acc-b); }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { background-color: var(--grouped); }
+body { background: var(--grouped); color: var(--ink); font: 400 17px/1.47 var(--text); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--grouped); }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--acc, #2B7556); outline-offset: 2px; border-radius: 8px; }
+svg { display: block; }
+p, h1, h2, h3 { margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* shared controls */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; font: 700 15px/1 var(--round); background: var(--fill); color: var(--ink); white-space: nowrap; transition: transform .12s, opacity .15s; }
+.btn:active { transform: scale(.96); }
+.btn.primary { background: var(--acc-b); color: #FFFFFF; }
+.btn.tinted { background: color-mix(in srgb, var(--acc-b) 14%, transparent); color: var(--acc); }
+.btn.lg { min-height: 50px; padding: 0 26px; font-size: 17px; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.link { min-height: 44px; display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: var(--acc); font: 500 17px var(--text); }
+.link.strong { font-weight: 700; }
+.link:disabled { opacity: .4; cursor: not-allowed; }
+.link.danger { color: var(--err-ink); }
+.eyebrow { font: 700 13px/1.2 var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.sec-h { margin: 22px 0 8px; padding-left: 4px; font: 800 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.icon-btn { width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--fill); display: grid; place-items: center; color: var(--acc); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.help { font-size: 15px; color: var(--ink2); max-width: 62ch; }
+
+/* page frame */
+.page { max-width: 720px; margin-inline: auto; padding-block: calc(26px + env(safe-area-inset-top, 0px)) calc(var(--tab-h) + 48px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 20px; }
+.h-head { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.h-title { flex: 1; min-width: 0; }
+.h-title h1 { margin-top: 2px; font: 800 34px/1.1 var(--round); letter-spacing: -.01em; }
+.brand { display: inline-flex; align-items: center; gap: 7px; color: var(--acc); }
+.logo { width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(150deg, var(--acc-a), var(--acc-b)); display: grid; place-items: center; color: #FFFFFF; }
+.round-btn { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--fill); color: var(--acc); display: grid; place-items: center; }
+
+/* shelf */
+.banner > span { flex: 1 1 180px; min-width: 0; }
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 2px 10px; padding: 6px 8px 6px 16px; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); font-size: 15px; color: var(--ink2); }
+.summary { background: var(--card); border-radius: 22px; padding: 16px 20px; box-shadow: var(--shadow); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stat .k { font: 700 13px var(--round); color: var(--ink2); }
+.stat .v { font: 800 30px/1.1 var(--round); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.stat.s .v { color: var(--acc); }
+.stat.d .v { color: var(--gap-ink); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; min-height: 168px; padding: 14px 16px 16px; border: 0; border-radius: 22px; text-align: left; color: #FFFFFF; background: linear-gradient(150deg, var(--acc-a), var(--acc-b)); box-shadow: 0 10px 26px -14px var(--acc-b); transition: transform .16s; }
+.tile:active { transform: scale(.97); }
+.tile-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: rgba(0, 0, 0, .2); font: 700 13px/1 var(--round); color: #FFFFFF; font-variant-numeric: tabular-nums; }
+.tile h3 { font: 800 20px/1.2 var(--round); letter-spacing: -.005em; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; text-wrap: balance; }
+.tile .tm { margin-top: 4px; font: 600 13px var(--round); opacity: .9; }
+.tile .lead { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; font: 800 13px var(--round); }
+.tile .lead i { flex: 1; border-bottom: 2px dotted rgba(255, 255, 255, .5); margin-bottom: 3px; }
+.empty-card { background: var(--card); border-radius: 26px; padding: 26px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.empty-card h2 { font: 800 26px/1.15 var(--round); text-wrap: balance; }
+.empty-card > p { color: var(--ink2); max-width: 52ch; }
+.steps { display: grid; gap: 10px; margin: 4px 0 6px; padding: 0; list-style: none; counter-reset: s; }
+.steps li { display: flex; gap: 12px; align-items: baseline; }
+.steps li::before { counter-increment: s; content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); font: 800 13px var(--round); color: var(--ink2); transform: translateY(-2px); }
+.steps b { font-weight: 600; }
+.specimen { align-self: stretch; padding: 12px 16px 10px; border-radius: 18px; background: var(--fill); }
+
+/* book: glass top bar + reading column */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding: 6px max(16px, env(safe-area-inset-left, 0px)) 10px; background: var(--glass); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: .5px solid var(--sep); }
+.tb-in { max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: 8px; }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.seg { position: relative; display: grid; grid-template-columns: repeat(var(--n, 2), 1fr); padding: 3px; border-radius: 12px; background: var(--fill); }
+.seg .thumb { position: absolute; top: 3px; left: 3px; bottom: 3px; width: calc((100% - 6px) / var(--n, 2)); border-radius: 9px; background: var(--thumb); box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04); transition: transform .32s cubic-bezier(.3, .7, .2, 1); }
+.seg button { position: relative; z-index: 1; min-height: 34px; border: 0; background: none; font: 700 15px var(--round); color: var(--ink2); border-radius: 9px; }
+.seg button[aria-pressed="true"] { color: var(--ink); }
+.doc { max-width: 720px; margin-inline: auto; padding-block: 20px calc(120px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 18px; }
+.s-head { display: flex; flex-direction: column; gap: 4px; }
+.s-head .eyebrow { color: var(--acc); }
+.s-head h1 { font: 800 32px/1.15 var(--round); letter-spacing: -.01em; text-wrap: balance; }
+.meta { color: var(--ink2); font-size: 15px; }
+
+/* the index */
+.index { list-style: none; margin: 0; padding: 4px 16px; border-radius: 22px; background: var(--card); box-shadow: var(--shadow); }
+.index > li { position: relative; }
+.index > li + li::before { content: ""; position: absolute; top: 0; left: 0; right: 0; border-top: .5px solid var(--sep); }
+.index > li.letter { padding: 14px 0 0; font: 800 13px var(--round); letter-spacing: .08em; color: var(--acc); }
+.index > li.letter::before, .index > li.letter + li::before { display: none; }
+.entry { display: flex; align-items: flex-end; gap: 6px; width: 100%; min-height: 50px; padding: 12px 0; border: 0; background: none; text-align: left; }
+.e-text { flex: 0 1 auto; max-width: calc(100% - 56px); font: 400 18px/1.42 var(--serif); }
+.e-lead { flex: 1 1 14px; min-width: 14px; margin-bottom: 7px; border-bottom: 2px dotted var(--dots); }
+.e-page { flex: none; min-width: 28px; text-align: right; font: 800 17px/1.2 var(--round); font-variant-numeric: tabular-nums; }
+.entry:hover .e-text { text-decoration: underline; text-decoration-color: var(--ink3); text-underline-offset: 4px; }
+.seealso { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -6px 0 0; padding: 0 0 12px 14px; }
+.sa { font: 700 13px var(--round); color: var(--acc); }
+.gist { font: italic 400 15px var(--serif); color: var(--ink2); }
+.ref { position: relative; display: inline-flex; align-items: center; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--acc-b) 13%, transparent); color: var(--acc); font: 700 14px var(--round); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ref::after { content: ""; position: absolute; inset: -7px -2px; }
+span.ref::after { display: none; }
+.think { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1.5px dashed var(--ink3); border-radius: 16px; padding: 12px 14px; color: var(--ink2); font-size: 15px; }
+.think b { font: 800 15px var(--round); color: var(--ink); font-variant-numeric: tabular-nums; }
+@keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acc-b) 45%, transparent); background: color-mix(in srgb, var(--acc-b) 12%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; background: transparent; } }
+.index > li.flash { animation: flash 1.4s ease-out; border-radius: 12px; }
+
+/* floating glass bar (in a book) */
+.bar { position: fixed; z-index: 6; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(600px, calc(100% - 24px)); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 10px; border-radius: 26px; background: var(--glass); backdrop-filter: saturate(180%) blur(22px); -webkit-backdrop-filter: saturate(180%) blur(22px); box-shadow: var(--bar-shadow); }
+.bar-ic { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--acc); }
+.bar-ic.tint { background: color-mix(in srgb, var(--acc-b) 14%, transparent); }
+.bar-t { flex: 1; min-width: 0; }
+.bar-t b { display: block; font: 800 17px/1.2 var(--round); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-t span { display: block; font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .btn { min-height: 46px; padding: 0 20px; font-size: 16px; }
+.ring circle { fill: none; }
+.ring .trk { stroke: var(--fill2); }
+.ring .val { stroke: var(--acc); stroke-linecap: round; transition: stroke-dashoffset .7s cubic-bezier(.3, .7, .2, 1); }
+
+/* glass tab bar */
+.tabbar { position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; background: var(--glass); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: inset 0 .5px 0 var(--sep); padding: 0 max(8px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-left, 0px)); }
+.tabbar .tb { max-width: 560px; margin: 0 auto; height: var(--tab-h); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tab { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding-top: 4px; border: 0; background: none; color: var(--ink2); font: 600 11px var(--text); }
+.tab[aria-current="page"] { color: var(--acc); }
+.tab .mk { width: 30px; height: 26px; border-radius: 9px; display: grid; place-items: center; background: var(--acc-b); color: #FFFFFF; }
+.badge { position: absolute; top: 5px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--err); color: #FFFFFF; font: 700 11px/18px var(--text); text-align: center; }
+body.in-book .tabbar { display: none; }
+
+/* grouped lists */
+.group { list-style: none; margin: 0; padding: 0; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); overflow: hidden; }
+.group > li { position: relative; }
+.group > li + li::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: .5px solid var(--sep); }
+.g-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 11px 16px; border: 0; background: none; text-align: left; font-size: 16px; }
+button.g-row:active { background: var(--fill); }
+.g-row .val { margin-left: auto; color: var(--ink2); font-size: 15px; white-space: nowrap; }
+.g-row.danger { color: var(--err-ink); }
+.g-row.acc { color: var(--acc); }
+.g-stack { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px 14px; }
+.g-stack .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lt { font: 400 17px/1.4 var(--serif); }
+.because { font: italic 400 15px/1.45 var(--serif); color: var(--ink2); }
+
+/* ask */
+.askbox { display: flex; gap: 8px; align-items: center; }
+.search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow); color: var(--ink2); }
+.search input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; outline: none; font-size: 17px; color: var(--ink); }
+.search input::placeholder { color: var(--ink3); }
+.tries { display: flex; flex-wrap: wrap; gap: 8px; }
+.try { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); font: 600 15px var(--text); text-align: left; }
+.walk .w { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 16px; }
+.walk .wt { position: relative; font: 600 16px var(--text); }
+.walk .ws { flex: none; font: 700 13px var(--round); color: var(--ink2); }
+.walk li.not .wt { color: var(--ink2); font-weight: 400; }
+.walk li.not .wt::after { content: ""; position: absolute; left: 0; right: 0; top: 54%; height: 1.5px; background: var(--ink2); }
+.walk li.that { background: color-mix(in srgb, var(--acc-b) 12%, transparent); }
+.walk li.that .wt { font-weight: 700; }
+.walk li.that .ws { color: var(--acc); }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } }
+@keyframes strike { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.walk.animate li { animation: rise .32s ease-out both; animation-delay: calc(var(--i) * 140ms); }
+.walk.animate li.not .wt::after { transform-origin: left; animation: strike .28s ease-in both; animation-delay: calc(var(--i) * 140ms + 220ms); }
+.found { margin-top: 14px; padding: 18px 20px 20px; border-radius: 24px; background: var(--card); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+.found.animate { animation: rise .4s ease-out both; animation-delay: calc(var(--n) * 140ms + 160ms); }
+.found .eyebrow { color: var(--acc); }
+.pgline { display: flex; align-items: baseline; gap: 6px; }
+.pgline .p { font: 800 17px var(--round); color: var(--ink2); }
+.pgline .pg { font: 800 64px/1 var(--round); letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--acc); }
+.found-text { font: 400 21px/1.4 var(--serif); margin-bottom: 8px; }
+.ai { display: flex; flex-direction: column; gap: 10px; }
+.ai-answer { font: 400 18px/1.55 var(--serif); }
+.answer-card { padding: 16px 18px; border-radius: 20px; background: var(--card); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+.notice { background: var(--gap-tint); color: var(--ink); border-radius: 16px; padding: 12px 14px; font-size: 15px; }
+.notice b { font: 800 12px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--gap-ink); margin-right: 6px; }
+
+/* revisit */
+.rv-home { display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 8px; }
+.ring-wrap { position: relative; width: 156px; height: 156px; margin-bottom: 24px; }
+.ring-wrap .ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-center strong { font: 800 46px/1 var(--round); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.ring-center span { font-size: 13px; color: var(--ink2); margin-top: 4px; }
+.rv-headline { font: 800 28px/1.2 var(--round); letter-spacing: -.01em; }
+.rv-sub { color: var(--ink2); margin: 8px 0 26px; max-width: 360px; font-size: 15px; }
+.rv-actions { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 8px; }
+.rv-card { width: 100%; padding: 22px 20px; border-radius: 24px; background: var(--card); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.rv-src { font-size: 13px; color: var(--ink2); }
+.rv-q { font: 700 24px/1.3 var(--round); letter-spacing: -.01em; text-wrap: pretty; }
+.rv-q em { font-style: normal; color: var(--acc); }
+.rv-ans { padding: 14px 16px; border-radius: 16px; background: var(--fill); font: 400 20px/1.5 var(--serif); }
+.rv-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rv-foot .btn { min-height: 50px; font-size: 16px; }
+.btn.miss { color: var(--err-ink); }
+
+/* sheets */
+dialog.sheet { position: fixed; inset: auto 0 0 0; margin: 0 auto; width: 100%; max-width: 560px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); padding: 0; border: 0; border-radius: 26px 26px 0 0; background: var(--raised); color: var(--ink); overflow: auto; box-shadow: 0 30px 60px rgba(0, 0, 0, .28); }
+dialog.sheet::backdrop { background: rgba(0, 0, 0, .34); }
+dialog.sheet[open] { animation: up .26s cubic-bezier(.2, .8, .2, 1); }
+@keyframes up { from { transform: translateY(40px); opacity: .7; } }
+@media (min-width: 640px) { dialog.sheet { inset: 0; margin: auto; border-radius: 26px; max-height: calc(100dvh - 48px); height: fit-content; } }
+.sheet-in { padding: 0 max(20px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 16px; }
+.sheet-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin: 0 calc(-1 * max(20px, env(safe-area-inset-left, 0px))); padding: 6px max(20px, env(safe-area-inset-left, 0px)); background: var(--raised); border-bottom: .5px solid var(--sep); }
+.sheet-head h2 { font: 700 17px var(--round); text-align: center; }
+.sheet-head > :first-child { justify-self: start; }
+.sheet-head > :last-child { justify-self: end; }
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > .lbl, .field > legend { padding: 0 4px; font: 700 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.input, .tx { width: 100%; min-height: 48px; border: 0; border-radius: 14px; background: var(--fill); padding: 11px 14px; font-size: 17px; outline: none; }
+.input:focus, .tx:focus { box-shadow: 0 0 0 2px var(--acc); }
+.input::placeholder, .tx::placeholder { color: var(--ink3); }
+.tx { min-height: 76px; resize: vertical; font: 400 18px/1.45 var(--serif); }
+.page-input { width: 5.4ch; font: 800 34px/1 var(--round); font-variant-numeric: tabular-nums; padding: 8px 14px; }
+.err-msg { color: var(--err-ink); font-weight: 600; font-size: 15px; }
+.err-msg:empty { display: none; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.bk { position: relative; flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--fill); font: 700 14px var(--round); white-space: nowrap; cursor: pointer; }
+.bk input { position: absolute; opacity: 0; pointer-events: none; }
+.bk .d { width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(150deg, var(--a), var(--b)); }
+.bk:has(input:checked) { background: var(--ink); color: var(--card); }
+.bk:has(input:focus-visible) { outline: 2px solid var(--acc); outline-offset: 2px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; }
+.sw input { position: absolute; opacity: 0; pointer-events: none; }
+.sw .d { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(150deg, var(--a), var(--b)); }
+.sw:has(input:checked) .d { box-shadow: 0 0 0 2px var(--raised), 0 0 0 4px var(--ink); }
+.sw:has(input:focus-visible) { outline: 2px solid var(--acc); }
+.pair { padding: 12px 14px; border-radius: 16px; background: var(--fill); }
+.pair .src { display: block; margin-bottom: 3px; font: 700 12px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.pair p { font: 400 18px/1.45 var(--serif); }
+.islike { display: flex; align-items: center; gap: 10px; margin: -8px 0; padding-left: 22px; font: 700 13px var(--round); color: var(--acc); }
+.islike i { width: 2px; height: 22px; border-radius: 1px; background: var(--acc); }
+.picker { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; border-radius: 16px; background: var(--fill); }
+.picker li + li { border-top: .5px solid var(--sep); }
+.picker button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 10px 14px; border: 0; background: none; text-align: left; }
+.picker .ref { flex: none; }
+.picker .pt { flex: 1; min-width: 0; font: 400 16px/1.35 var(--serif); }
+.tag { flex: none; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--acc-b) 14%, transparent); color: var(--acc); font: 700 12px var(--round); }
+.status { display: flex; gap: 10px; align-items: flex-start; }
+.status i { flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--gap); }
+.status.cloud i { background: var(--ok); }
+.status.memory i { background: var(--err); }
+
+/* toast */
+.toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 16px + env(safe-area-inset-bottom, 0px)); width: max-content; max-width: min(440px, calc(100vw - 32px)); display: flex; align-items: center; gap: 14px; padding: 11px 18px; border-radius: 22px; background: var(--hud); color: var(--hud-fg); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); box-shadow: 0 10px 30px rgba(0, 0, 0, .2); font: 500 15px var(--text); animation: rise .25s ease-out; }
+body.in-book .toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+.toast button { min-height: 36px; padding: 0 2px; border: 0; background: none; color: var(--hud-fg); font: 700 15px var(--round); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .tile { min-height: 150px; padding: 12px 13px 14px; gap: 18px; }
+  .tile h3 { font-size: 17px; }
+  .stat .v { font-size: 26px; }
+  .h-title h1 { font-size: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<main id="main"></main>
+
+<nav class="tabbar" aria-label="Main">
+  <div class="tb">
+    <button type="button" class="tab" data-act="go" data-to="shelf" id="tabShelf">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h4v16H4z"/><path d="M10 4h4v16h-4z"/><path d="M16.2 5.2l3.6-1 2.2 15.2-3.6 1z"/></svg>
+      <span>Shelf</span>
+    </button>
+    <button type="button" class="tab" data-act="go" data-to="ask" id="tabAsk">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span>Ask</span>
+    </button>
+    <button type="button" class="tab" data-act="mark-new">
+      <span class="mk" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg></span>
+      <span>Mark<span class="sr"> a page</span></span>
+    </button>
+    <button type="button" class="tab" data-act="go" data-to="revisit" id="tabRevisit">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      <span>Revisit</span>
+      <b class="badge" id="rvBadge" hidden></b>
+    </button>
+  </div>
+</nav>
+
+<div class="bar" id="bookBar" hidden></div>
+
+<dialog class="sheet" id="sheetMark" aria-labelledby="markH">
+  <form id="markForm" class="sheet-in" novalidate>
+    <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="markH">Mark a page</h2><button type="submit" class="link strong">Add</button></div>
+    <fieldset class="field"><legend>Book</legend><div class="chips" id="markBooks"></div></fieldset>
+    <div class="field"><label class="lbl" for="markPage">Page</label><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"></div>
+    <div class="field"><label class="lbl" for="markText">In your own words</label><textarea id="markText" class="tx" rows="2" maxlength="280" placeholder="What this page says, in one line"></textarea><p class="help" id="markHint">Short beats complete. Six to twelve words is plenty.</p></div>
+    <p class="err-msg" id="markErr" role="alert"></p>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="sheetBook" aria-labelledby="bookH">
+  <form id="bookForm" class="sheet-in" novalidate>
+    <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="bookH">New book</h2><button type="submit" class="link strong" id="bookSave">Add</button></div>
+    <div class="field"><label class="lbl" for="bTitle">Title</label><input id="bTitle" class="input" autocomplete="off" maxlength="140"></div>
+    <div class="field"><label class="lbl" for="bAuthor">Author</label><input id="bAuthor" class="input" autocomplete="off" maxlength="100"></div>
+    <div class="field"><label class="lbl" for="bPages">Total pages (optional)</label><input id="bPages" class="input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="width: 9ch"><p class="help">Shows how far into the book your index reaches.</p></div>
+    <fieldset class="field"><legend>Colour</legend><div class="swatches" id="bColors"></div></fieldset>
+    <p class="err-msg" id="bookErr" role="alert"></p>
+    <div id="bookDanger"></div>
+  </form>
+</dialog>
+
+<dialog class="sheet" id="sheetDetail" aria-label="Mark"><div class="sheet-in" id="detailBody"></div></dialog>
+<dialog class="sheet" id="sheetLink" aria-label="This is like that"><div class="sheet-in" id="linkBody"></div></dialog>
+<dialog class="sheet" id="sheetMenu" aria-label="Cairn"><div class="sheet-in" id="menuBody"></div></dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
+  const newId = (p) => p + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const DAY = 86400000;
+  const STEPS = [1, 3, 7, 16, 35, 90];
+  const LS_KEY = 'cairn.shelf.v1';
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  const reduce = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+
+  // Book colours: Margin's palette plus three of Cairn's own (moss, ember, stone).
+  const PAL = {
+    moss: { name: 'Moss', a: '#4AA37C', b: '#2B7556', d: '#6ED0A4' },
+    indigo: { name: 'Indigo', a: '#6A67F0', b: '#4440D0', d: '#8E8BFF' },
+    ocean: { name: 'Ocean', a: '#2F8CFF', b: '#005ED6', d: '#4DA3FF' },
+    lagoon: { name: 'Lagoon', a: '#1A9AB0', b: '#0D6F84', d: '#45C6DC' },
+    grape: { name: 'Grape', a: '#B160E6', b: '#7B35B8', d: '#C98BF2' },
+    ember: { name: 'Ember', a: '#F08A4B', b: '#B8501A', d: '#FF9F6B' },
+    stone: { name: 'Stone', a: '#A39280', b: '#6E5E4E', d: '#C9B8A5' },
+    dusk: { name: 'Dusk', a: '#7D839C', b: '#4E5369', d: '#A9AEC4' }
+  };
+  const OLD = { navy: 'ocean', oxblood: 'ember', green: 'moss', mustard: 'stone', plum: 'grape', slate: 'dusk' };
+  const PKEYS = Object.keys(PAL);
+  const pal = (k) => PAL[k] || PAL[OLD[k]] || PAL.moss;
+  const accStyle = (k) => { const p = pal(k); return `--acc-a:${p.a};--acc-b:${p.b};--acc-d:${p.d}`; };
+  const dotStyle = (k) => { const p = pal(k); return `--a:${p.a};--b:${p.b}`; };
+  function setAcc(node, k) { const p = pal(k); node.setAttribute('data-acc', ''); node.style.setProperty('--acc-a', p.a); node.style.setProperty('--acc-b', p.b); node.style.setProperty('--acc-d', p.d); }
+
+  const I = {
+    back: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
+    more: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+    plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    search: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    link: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+    spark: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+    check: '<svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    cairn: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><ellipse cx="12" cy="19.6" rx="9" ry="3.2"/><ellipse cx="11.4" cy="13.8" rx="6.2" ry="2.8"/><ellipse cx="12.5" cy="8.6" rx="4.2" ry="2.4"/><ellipse cx="11.8" cy="4.2" rx="2.5" ry="1.8"/></svg>',
+    cairnLg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><ellipse cx="12" cy="19.6" rx="9" ry="3.2"/><ellipse cx="11.4" cy="13.8" rx="6.2" ry="2.8"/><ellipse cx="12.5" cy="8.6" rx="4.2" ry="2.4"/><ellipse cx="11.8" cy="4.2" rx="2.5" ry="1.8"/></svg>'
+  };
+
+  // ---------- State ----------
+  let S = { books: [], links: [], examples: false };
+  const V = { name: 'shelf', bookId: null, sort: 'page', lastBookId: null, flash: null,
+    ask: { q: '', res: null, ai: null, ctl: null }, rv: { id: null, shown: false, done: 0, started: false } };
+  let mode = 'memory';
+  const Cap = { sample: null, downloads: null };
+  const Cloud = { on: false, root: null, books: null };
+
+  function normalize(d) {
+    const out = { books: [], links: [], examples: !!(d && d.examples) };
+    if (d && Array.isArray(d.books)) out.books = d.books.filter((b) => b && b.id && b.title).map((b) => ({ ...b, marks: Array.isArray(b.marks) ? b.marks : [] }));
+    if (d && Array.isArray(d.links)) out.links = d.links.filter((l) => l && l.id && l.a && l.b);
+    return out;
+  }
+
+  // ---------- Derived ----------
+  const shelfOrder = () => [...S.books].sort((a, b) => (b.touched || b.created || 0) - (a.touched || a.created || 0));
+  function allMarks() { const out = []; for (const b of S.books) for (const m of b.marks) out.push({ m, b }); return out; }
+  function findMark(id) { for (const b of S.books) { const m = b.marks.find((x) => x.id === id); if (m) return { m, b }; } return null; }
+  const linksOf = (id) => S.links.filter((l) => l.a === id || l.b === id).map((l) => ({ l, other: l.a === id ? l.b : l.a }));
+  const isLinked = (a, b) => S.links.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+  function shortRef(b) { const last = (b.author || '').trim().split(/\s+/).pop(); return last || b.title.split(/\s+/).slice(0, 2).join(' '); }
+  function gist(t) { const s = String(t).split(/\s[—–-]\s|:\s/)[0]; const w = s.split(/\s+/); return w.length <= 5 ? s : w.slice(0, 4).join(' ') + '…'; }
+  const dueAt = (m) => (m.rev && m.rev.due) || (m.at || 0) + DAY;
+  const dueList = () => { const now = Date.now(); return allMarks().filter(({ m }) => dueAt(m) <= now).sort((x, y) => dueAt(x.m) - dueAt(y.m)); };
+  const maxPage = (b) => b.marks.reduce((n, m) => Math.max(n, m.page), 0);
+  function relDays(t) { const d = Math.round((t - Date.now()) / DAY); if (d <= 0) return 'today'; if (d === 1) return 'tomorrow'; return 'in ' + d + ' days'; }
+  function ring(size, stroke, frac) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(1, frac)));
+    return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle class="trk" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}"/><circle class="val" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/></svg>`;
+  }
+
+  // ---------- Persistence ----------
+  function localOk() { try { localStorage.setItem('cairn.t', '1'); localStorage.removeItem('cairn.t'); return true; } catch (e) { return false; } }
+  function cacheLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
+  function loadLocal() { try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+
+  let failShown = 0;
+  function saveFail(e) {
+    if (Date.now() - failShown < 4000) return;
+    failShown = Date.now();
+    if (e && e.code === 'quota_exceeded') toast('Storage for this page is full. Remove old books to add more.');
+    else if (e && e.code === 'revoked') { Cloud.on = false; mode = localOk() ? 'device' : 'memory'; toast('Saving to your account stopped. Changes stay in this browser.'); }
+    else toast('Couldn’t save to your account. The change is kept in this browser for now.');
+  }
+  async function putBook(b) { cacheLocal(); if (!Cloud.on) return; try { await Cloud.books.doc(b.id).set(clone(b)); } catch (e) { saveFail(e); } }
+  async function dropBook(id) { cacheLocal(); if (!Cloud.on) return; try { await Cloud.books.doc(id).delete(); } catch (e) { saveFail(e); } }
+  async function putMeta() { cacheLocal(); if (!Cloud.on) return; try { await Cloud.root.set({ links: clone(S.links), examples: S.examples, updated: Date.now() }); } catch (e) { saveFail(e); } }
+
+  let renderQueued = false;
+  function queueRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); }
+
+  async function initCaps() {
+    if (!window.claude || typeof window.claude.use !== 'function') return;
+    const use = (n) => window.claude.use(n).catch(() => null);
+    use('sample').then((s) => { Cap.sample = s || null; if (s) queueRender(); });
+    use('downloads').then((d) => { Cap.downloads = d || null; });
+    const [db, user] = await Promise.all([use('db'), use('user')]);
+    let uid = null;
+    if (db && user) { try { uid = await user.id(); } catch (e) { uid = null; } }
+    if (!db || !uid) return;
+    try {
+      const root = db.doc('data/users/' + uid + '/shelf');
+      const books = root.collection('books');
+      const [rs, bs] = await Promise.all([root.get(), books.get()]);
+      const cloudBooks = bs.docs.filter((d) => d.exists).map((d) => clone(d.data()));
+      Cloud.root = root; Cloud.books = books; Cloud.on = true; mode = 'cloud';
+      if (!rs.exists && !cloudBooks.length) {
+        if (S.books.length) { for (const b of S.books) await putBook(b); await putMeta(); }
+      } else {
+        S = normalize({ books: cloudBooks, links: rs.exists ? rs.data().links : [], examples: rs.exists ? rs.data().examples : false });
+        cacheLocal();
+      }
+      render();
+      books.onSnapshot((snap) => { S.books = normalize({ books: snap.docs.filter((d) => d.exists).map((d) => clone(d.data())) }).books; cacheLocal(); queueRender(); }, onSubError);
+      root.onSnapshot((snap) => { if (!snap.exists) return; const d = snap.data(); S.links = normalize({ links: d.links }).links; S.examples = !!d.examples; cacheLocal(); queueRender(); }, onSubError);
+    } catch (e) { Cloud.on = false; mode = localOk() ? 'device' : 'memory'; }
+  }
+  function onSubError(e) { if (e && (e.code === 'revoked' || e.code === 'unavailable')) { Cloud.on = false; mode = localOk() ? 'device' : 'memory'; } }
+
+  // ---------- Search ----------
+  const STOP = new Set(('a an the and or but of to in on at for from by with about as is are was were be been being it its this that these those i you he she we they them his her their our your my me do does did why what how when where who which whom can could should would will just not no so than then too very into over under again there here have has had more most some such only own same other get got make makes made thing things way people').split(' '));
+  function stem(w) { const t = w.replace(/ies$/, 'y').replace(/(ing|ed|es|s|ly)$/, ''); return t.length >= 3 ? t : w; }
+  function toks(s) { return (String(s).toLowerCase().match(/[a-z0-9']+/g) || []).map((w) => w.replace(/'s$/, '').replace(/'/g, '')).filter((w) => w.length > 1 && !STOP.has(w)).map(stem); }
+  function score(qt, tt) {
+    let s = 0;
+    for (const q of qt) { let best = 0; for (const t of tt) { if (t === q) { best = 3; break; } if (q.length >= 3 && t.length >= 3 && (t.startsWith(q) || q.startsWith(t))) best = 2; } s += best; }
+    return s;
+  }
+  function search(q) {
+    const qt = toks(q), order = shelfOrder();
+    if (!qt.length) return { q, walk: order.map((b) => ({ b, status: 'not' })), top: null, others: [], animate: true };
+    const hits = [];
+    for (const { m, b } of allMarks()) {
+      const extra = linksOf(m.id).map((x) => x.l.because).join(' ');
+      const s = score(qt, toks(m.text)) + 0.5 * score(qt, toks(extra)) + 0.25 * score(qt, toks(b.title + ' ' + (b.author || '')));
+      if (s > 0) hits.push({ id: m.id, bid: b.id, s });
+    }
+    hits.sort((x, y) => y.s - x.s);
+    const top = hits.length ? hits[0].id : null, topB = hits.length ? hits[0].bid : null;
+    const via = new Set(top ? linksOf(top).map((x) => { const f = findMark(x.other); return f && f.b.id; }).filter(Boolean) : []);
+    const hitBooks = new Set(hits.map((h) => h.bid));
+    const walk = order.map((b) => ({ b, status: b.id === topB ? 'that' : hitBooks.has(b.id) ? 'also' : via.has(b.id) ? 'via' : 'not' }));
+    return { q, walk, top, others: hits.slice(1, 5).map((h) => h.id), animate: true };
+  }
+
+  // ---------- Views ----------
+  function headHtml(title, extra = '') {
+    return `<header class="h-head"><div class="h-title"><p class="eyebrow brand"><span class="logo">${I.cairn}</span>Cairn</p><h1>${title}</h1></div>${extra}</header>`;
+  }
+
+  function viewShelf() {
+    const books = shelfOrder();
+    const tools = `<button type="button" class="btn primary" data-act="book-new">${I.plus}Book</button><button type="button" class="round-btn" data-act="menu" aria-label="Storage, export and help">${I.more}</button>`;
+    let h = headHtml('Shelf', tools);
+    if (!books.length) {
+      return h + `<section class="empty-card">
+        <p class="eyebrow">Your shelf is empty</p>
+        <h2>Index the book in your hands</h2>
+        <p>Add the paper book you’re reading. When a page matters, write its number and one line in your own words. Later, ask a question and Cairn points you to the book and the page.</p>
+        <ol class="steps"><li><span><b>Mark</b> a page: its number and one line.</span></li><li><span><b>Link</b> it when it’s like something in another book, and say why.</span></li><li><span><b>Ask</b> your shelf, and <b>revisit</b> pages before you forget them.</span></li></ol>
+        <div class="specimen" aria-label="What an index line looks like">
+          <p class="eyebrow" style="margin-bottom:2px">An index line</p>
+          <div class="entry" style="cursor:default"><span class="e-text">Opportunity cost: the real price is the next-best option</span><span class="e-lead" aria-hidden="true"></span><span class="e-page">83</span></div>
+          <div class="seealso"><span class="sa">see also</span><span class="ref">Kahneman 344</span><span class="gist">Sunk cost</span></div>
+        </div>
+        <div class="row"><button type="button" class="btn primary" data-act="book-new">${I.plus}Add a book</button><button type="button" class="btn" data-act="load-examples">Try an example shelf</button></div>
+      </section>`;
+    }
+    if (S.examples) h += `<div class="banner"><span>Example shelf. Its page numbers are made up.</span><button type="button" class="link" data-act="clear-examples">Remove</button></div>`;
+    const nDue = dueList().length;
+    h += `<section class="summary" aria-label="Totals">
+      <div class="stat"><p class="k">Marks</p><p class="v">${allMarks().length}</p></div>
+      <div class="stat s"><p class="k">See-alsos</p><p class="v">${S.links.length}</p></div>
+      <div class="stat${nDue ? ' d' : ''}"><p class="k">To revisit</p><p class="v">${nDue}</p></div></section>`;
+    h += `<div class="grid">` + books.map((b) => {
+      const n = b.marks.length, mp = maxPage(b);
+      return `<button type="button" class="tile" style="${accStyle(b.color)}" data-act="open-book" data-id="${esc(b.id)}">
+        <span class="tile-top"><span class="chip">${plural(n, 'mark')}</span></span>
+        <span><h3>${esc(b.title)}</h3>${b.author ? `<p class="tm">${esc(b.author)}</p>` : ''}${n ? `<span class="lead"><span>to page</span><i aria-hidden="true"></i><span>${mp}</span></span>` : ''}</span>
+      </button>`;
+    }).join('') + `</div>`;
+    return h;
+  }
+
+  function entryHtml(m) {
+    const see = linksOf(m.id).map(({ other }) => findMark(other)).filter(Boolean);
+    return `<li id="m-${esc(m.id)}"${V.flash === m.id ? ' class="flash"' : ''}><button type="button" class="entry" data-act="open-mark" data-id="${esc(m.id)}"><span class="e-text">${esc(m.text)}</span><span class="e-lead" aria-hidden="true"></span><span class="e-page"><span class="sr">page </span>${m.page}</span></button>${see.length ? `<div class="seealso"><span class="sa">see also</span>${see.map((o) => `<button type="button" class="ref" data-act="goto-mark" data-id="${esc(o.m.id)}">${esc(shortRef(o.b))} ${o.m.page}</button><span class="gist">${esc(gist(o.m.text))}</span>`).join('')}</div>` : ''}</li>`;
+  }
+  const sortKey = (t) => String(t).replace(/^(the|a|an)\s+/i, '').toLowerCase();
+
+  function viewBook() {
+    const b = S.books.find((x) => x.id === V.bookId);
+    if (!b) { V.name = 'shelf'; return viewShelf(); }
+    const marks = [...b.marks];
+    const nLinks = marks.reduce((n, m) => n + linksOf(m.id).length, 0);
+    const az = V.sort === 'az';
+    let h = `<div class="topbar"><div class="tb-in">
+      <div class="nav"><button type="button" class="link" data-act="go" data-to="shelf">${I.back}Shelf</button><button type="button" class="icon-btn" data-act="book-edit" data-id="${esc(b.id)}" aria-label="Edit book">${I.more}</button></div>
+      ${marks.length > 1 ? `<div class="seg" role="group" aria-label="Order of the index" style="--n:2"><span class="thumb" aria-hidden="true" style="transform:translateX(${az ? '100%' : '0'})"></span><button type="button" aria-pressed="${!az}" data-act="sort" data-sort="page">By page</button><button type="button" aria-pressed="${az}" data-act="sort" data-sort="az">A–Z</button></div>` : ''}
+    </div></div><div class="doc">
+      <div class="s-head"><p class="eyebrow">Your index · ${plural(marks.length, 'mark')}${nLinks ? ' · ' + plural(nLinks, 'see-also') : ''}</p><h1>${esc(b.title)}</h1>${b.author ? `<p class="meta">${esc(b.author)}</p>` : ''}</div>`;
+    if (!marks.length) {
+      h += `<div class="empty-card"><h2>No marks yet</h2><p>When a page matters, tap Mark page below. Write the page number and one line in your own words.</p></div>`;
+    } else {
+      h += `<ul class="index">`;
+      if (!az) { marks.sort((x, y) => x.page - y.page || x.at - y.at); h += marks.map(entryHtml).join(''); }
+      else {
+        marks.sort((x, y) => sortKey(x.text).localeCompare(sortKey(y.text)));
+        let last = '';
+        for (const m of marks) {
+          const L = (sortKey(m.text)[0] || '#').toUpperCase(), letter = /[A-Z]/.test(L) ? L : '#';
+          if (letter !== last) { h += `<li class="letter" aria-hidden="true">${letter}</li>`; last = letter; }
+          h += entryHtml(m);
+        }
+      }
+      h += `</ul>`;
+      const mp = maxPage(b);
+      if (b.pages && mp < b.pages) h += `<div class="think"><span>Not yet indexed</span><b>p.${mp + 1} – ${b.pages}</b></div>`;
+    }
+    return h + `</div>`;
+  }
+
+  function bookBarHtml(b) {
+    const mp = maxPage(b), n = b.marks.length;
+    const lead = b.pages ? ring(44, 5, mp / b.pages) : `<span class="bar-ic tint">${I.cairnLg}</span>`;
+    const title = n ? `Indexed to p.${mp}` : 'Start your index';
+    const sub = b.pages ? `${Math.round((mp / b.pages) * 100)}% of ${b.pages} pages` : `${plural(n, 'mark')}${n ? '' : ' so far'}`;
+    return `<span class="bar-ic">${lead}</span><span class="bar-t"><b>${title}</b><span>${sub}</span></span><button type="button" class="btn primary" data-act="mark-new" data-book="${esc(b.id)}">Mark page</button>`;
+  }
+
+  function viewAskShell() {
+    return headHtml('Ask') + `<form id="askForm" class="askbox" autocomplete="off">
+        <label class="search"><span class="sr">Ask your shelf</span>${I.search}<input id="askQ" type="search" placeholder="Ask your shelf" value="${esc(V.ask.q)}" enterkeyhint="search"></label>
+        <button type="submit" class="btn primary">Walk</button></form><div id="askResults"></div>`;
+  }
+
+  function viewAskResults() {
+    if (!allMarks().length) return `<p class="help">There’s nothing to walk yet. Add a book and a few marks, then ask.</p>`;
+    const r = V.ask.res;
+    if (!r) {
+      let h = `<p class="help">Ask in plain words. Cairn walks your shelf book by book and points to the page. Answers come only from your own marks.</p>`;
+      if (S.examples) h += `<div class="tries" style="margin-top:14px"><button type="button" class="try" data-act="ask-try">Why do people hold on to losing bets?</button><button type="button" class="try" data-act="ask-try">What do prices tell us?</button></div>`;
+      return h;
+    }
+    const anim = r.animate && !reduce ? ' animate' : '';
+    const label = { not: 'not that one', that: 'that book', also: 'also here', via: 'via a see-also' };
+    let h = `<p class="sec-h">Walking the shelf</p><ol class="group walk${anim}">` + r.walk.map((w, i) => `<li class="${w.status}" style="--i:${i}"><div class="w"><span class="wt">${esc(w.b.title)}</span><span class="ws">${label[w.status]}</span></div></li>`).join('') + `</ol>`;
+    const top = r.top && findMark(r.top);
+    if (top) {
+      const { m, b } = top;
+      h += `<div class="found${anim}" data-acc style="--n:${r.walk.length};${accStyle(b.color)}"><p class="eyebrow">That page · ${esc(b.title)}</p>
+        <div class="pgline"><span class="p">p.</span><span class="pg">${m.page}</span></div>
+        <p class="found-text">${esc(m.text)}</p>
+        <div class="row"><button type="button" class="btn primary" data-act="goto-mark" data-id="${esc(m.id)}">Open in index</button></div></div>`;
+      const trail = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
+      if (trail.length) h += `<p class="sec-h">Your see-also trail</p><ul class="group">` + trail.map(({ l, o }) => `<li class="g-stack"><span class="top"><button type="button" class="ref" data-act="goto-mark" data-id="${esc(o.m.id)}">${esc(shortRef(o.b))} ${o.m.page}</button><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p></li>`).join('') + `</ul>`;
+      const others = r.others.map(findMark).filter(Boolean);
+      if (others.length) h += `<p class="sec-h">Also on your shelf</p><ul class="group">` + others.map(({ m: om, b: ob }) => `<li><button type="button" class="g-row" data-act="goto-mark" data-id="${esc(om.id)}"><span class="ref" style="${accStyle(ob.color)}" data-acc>${esc(shortRef(ob))} ${om.page}</span><span class="lt">${esc(om.text)}</span></button></li>`).join('') + `</ul>`;
+    } else {
+      h += `<div class="found"><p class="found-text" style="margin:0">None of your marks use those words.</p><p class="help">Try other words${Cap.sample ? ', or let Claude look for the idea instead of the words' : ''}.</p></div>`;
+    }
+    if (Cap.sample || V.ask.ai) h += viewAskAi();
+    return h;
+  }
+
+  function viewAskAi() {
+    const a = V.ask.ai;
+    let h = `<p class="sec-h">Look deeper</p><div class="ai">`;
+    if (!a) h += `<div class="think"><span>Claude matches ideas, not just words. It reads only your marks and links, and uses your Claude usage.</span><button type="button" class="btn tinted" data-act="ask-ai">${I.spark}Look deeper</button></div>`;
+    else if (a.status === 'loading') h += `<div class="think"><span>Claude is reading your marks…</span><button type="button" class="btn" data-act="ask-stop">Stop</button></div>`;
+    else if (a.status === 'error') h += `<div class="think"><span>${esc(a.msg)}</span>${a.retry ? `<button type="button" class="btn" data-act="ask-ai">Try again</button>` : ''}</div>`;
+    else {
+      const cites = a.ids.map(findMark).filter(Boolean);
+      h += `<div class="answer-card"><p class="eyebrow">From your marks</p>`;
+      if (a.answer) h += `<p class="ai-answer">${esc(a.answer)}</p>`;
+      if (cites.length) h += `<div class="row">${cites.map(({ m, b }) => `<button type="button" class="ref" data-acc style="${accStyle(b.color)}" data-act="goto-mark" data-id="${esc(m.id)}">${esc(shortRef(b))} ${m.page}</button>`).join('')}</div>`;
+      if (!a.answer && !cites.length) h += `<p class="help">Nothing on your shelf answers this yet.</p>`;
+      h += `</div>`;
+      if (a.gap) h += `<p class="notice"><b>Gap</b>${esc(a.gap)}</p>`;
+    }
+    return h + `</div>`;
+  }
+
+  function viewRevisit() {
+    let h = headHtml('Revisit');
+    const total = allMarks().length;
+    if (!total) return h + `<section class="empty-card"><h2>Nothing to revisit yet</h2><p>Revisit shows you a page number and asks what you marked there. Add a few marks first.</p></section>`;
+    const due = dueList();
+    let cur = V.rv.id ? findMark(V.rv.id) : null;
+    if (!V.rv.started || (!cur && !due.length)) {
+      const n = due.length, done = V.rv.done;
+      const frac = n + done ? done / (n + done) : 1;
+      const next = !n ? allMarks().sort((x, y) => dueAt(x.m) - dueAt(y.m))[0] : null;
+      h += `<section class="rv-home"><div class="ring-wrap">${ring(156, 13, frac)}<div class="ring-center">${n ? `<strong>${n}</strong><span>to recall</span>` : `<span style="color:var(--acc);margin:0">${I.check}</span>`}</div></div>
+        <h2 class="rv-headline">${n ? plural(n, 'page') + ' to recall' : 'All caught up'}</h2>
+        <p class="rv-sub">${n ? 'You’ll see a book and a page number. Recall what you marked there before you look.' : `Next up: page ${next.m.page} of ${esc(next.b.title)}, ${relDays(dueAt(next.m))}.`}</p>
+        <div class="rv-actions">${n ? `<button type="button" class="btn primary lg block" data-act="rv-start">Start</button>` : `<button type="button" class="btn lg block" data-act="rv-practice">Practice a random page</button>`}</div></section>`;
+      return h;
+    }
+    if (!cur) { V.rv.id = due[0].m.id; V.rv.shown = false; cur = due[0]; }
+    const { m, b } = cur;
+    const left = due.length;
+    h += `<section class="rv-card" data-acc style="${accStyle(b.color)}">
+      <p class="rv-src">${esc(b.title)}${left ? ' · ' + left + ' left' : ''}</p>
+      <h2 class="rv-q">What did you mark on <em>page ${m.page}</em>?</h2>`;
+    if (!V.rv.shown) {
+      h += `<button type="button" class="btn tinted lg block" data-act="rv-show">Show my note</button><p class="help">Not sure? Open your copy to page ${m.page} first.</p>`;
+    } else {
+      const see = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
+      h += `<p class="rv-ans">${esc(m.text)}</p>`;
+      if (see.length) h += see.map(({ l, o }) => `<div class="g-stack" style="padding:0"><span class="top"><span class="ref">${esc(shortRef(o.b))} ${o.m.page}</span><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p></div>`).join('');
+      h += `<div class="rv-foot"><button type="button" class="btn lg miss" data-act="rv-forgot">Forgot</button><button type="button" class="btn primary lg" data-act="rv-got">Remembered</button></div>`;
+    }
+    return h + `</section>`;
+  }
+
+  function render() {
+    const main = $('#main');
+    const inBook = V.name === 'book';
+    document.body.classList.toggle('in-book', inBook);
+    const book = inBook ? S.books.find((x) => x.id === V.bookId) : null;
+    setAcc(document.body, book ? book.color : 'moss');
+    if (V.name === 'ask') {
+      if (!$('#askForm')) { main.className = 'page'; main.innerHTML = viewAskShell(); }
+      $('#askResults').innerHTML = viewAskResults();
+      if (V.ask.res) V.ask.res.animate = false;
+    } else {
+      main.className = inBook ? '' : 'page';
+      main.innerHTML = inBook ? viewBook() : V.name === 'revisit' ? viewRevisit() : viewShelf();
+    }
+    const bar = $('#bookBar');
+    if (book) { bar.innerHTML = bookBarHtml(book); bar.hidden = false; } else bar.hidden = true;
+    const cur = inBook ? 'shelf' : V.name;
+    for (const [id, name] of [['tabShelf', 'shelf'], ['tabAsk', 'ask'], ['tabRevisit', 'revisit']]) {
+      const t = document.getElementById(id);
+      if (name === cur) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+    }
+    const n = dueList().length, badge = $('#rvBadge');
+    badge.textContent = n > 9 ? '9+' : String(n); badge.hidden = !n;
+    if (V.flash) {
+      const el = document.getElementById('m-' + V.flash);
+      if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' }));
+      const f = V.flash; setTimeout(() => { if (V.flash === f) V.flash = null; }, 1600);
+    }
+  }
+
+  function go(name) {
+    closeSheets();
+    V.name = name;
+    if (name === 'revisit') V.rv = { id: null, shown: false, done: 0, started: false };
+    render();
+    if (!V.flash) window.scrollTo(0, 0);
+  }
+
+  // ---------- Sheets ----------
+  function openSheet(id) { const d = document.getElementById(id); $$('dialog[open]').forEach((x) => { if (x !== d) x.close(); }); if (!d.open) d.showModal(); return d; }
+  function closeSheets() { $$('dialog[open]').forEach((d) => d.close()); }
+  $$('dialog.sheet').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));
+
+  // Tap-twice confirm, as in Margin.
+  const armedState = { key: null, t: null };
+  function armed(key, btn, label, fn) {
+    if (armedState.key === key) { clearTimeout(armedState.t); armedState.key = null; fn(); return; }
+    clearTimeout(armedState.t);
+    const orig = btn.textContent; btn.textContent = label; armedState.key = key;
+    armedState.t = setTimeout(() => { armedState.key = null; if (btn.isConnected) btn.textContent = orig; }, 3000);
+  }
+
+  function openMark(bookId) {
+    if (!S.books.length) { openBook(null); toast('Add the book first, then mark its pages.'); return; }
+    const order = shelfOrder();
+    const bid = bookId || (V.name === 'book' && V.bookId) || V.lastBookId || order[0].id;
+    $('#markBooks').innerHTML = order.map((b) => `<label class="bk"><input type="radio" name="markBook" value="${esc(b.id)}"${b.id === bid ? ' checked' : ''}><span class="d" style="${dotStyle(b.color)}" aria-hidden="true"></span><span>${esc(b.title)}</span></label>`).join('');
+    $('#markPage').value = ''; $('#markText').value = ''; $('#markErr').textContent = '';
+    $('#markHint').textContent = 'Short beats complete. Six to twelve words is plenty.';
+    openSheet('sheetMark');
+    const chk = $('#markBooks input:checked'); if (chk) chk.parentElement.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    setTimeout(() => $('#markPage').focus(), 60);
+  }
+  function submitMark(e) {
+    e.preventDefault();
+    const err = $('#markErr');
+    const sel = $('input[name="markBook"]:checked');
+    const b = sel && S.books.find((x) => x.id === sel.value);
+    const page = parseInt($('#markPage').value.replace(/\D/g, ''), 10);
+    const text = $('#markText').value.trim().replace(/\s+/g, ' ');
+    if (!b) { err.textContent = 'Pick the book this page is from.'; return; }
+    if (!Number.isFinite(page) || page < 1) { err.textContent = 'Enter the page number, like 83.'; $('#markPage').focus(); return; }
+    if (b.pages && page > b.pages) { err.textContent = `This book has ${b.pages} pages. Check the page number.`; $('#markPage').focus(); return; }
+    if (!text) { err.textContent = 'Write one line about the page in your own words.'; $('#markText').focus(); return; }
+    const now = Date.now();
+    const m = { id: newId('m'), page, text, at: now, rev: { n: 0, due: now + DAY } };
+    b.marks.push(m); b.touched = now; V.lastBookId = b.id;
+    putBook(b); closeSheets();
+    if (V.name === 'book' && V.bookId === b.id) V.flash = m.id;
+    render();
+    toast(`Marked page ${page}`, allMarks().length > 1 ? { label: 'Link it', act: () => openLink(m.id) } : null);
+  }
+
+  let BK = null;
+  function openBook(id) {
+    const b = id ? S.books.find((x) => x.id === id) : null;
+    BK = { id: b ? b.id : null };
+    $('#bookH').textContent = b ? 'Edit book' : 'New book';
+    $('#bookSave').textContent = b ? 'Save' : 'Add';
+    $('#bTitle').value = b ? b.title : ''; $('#bAuthor').value = b ? (b.author || '') : ''; $('#bPages').value = b && b.pages ? b.pages : '';
+    const used = new Set(S.books.map((x) => pal(x.color) === PAL[x.color] ? x.color : OLD[x.color]));
+    const cur = b ? (PAL[b.color] ? b.color : OLD[b.color] || 'moss') : (PKEYS.find((k) => !used.has(k)) || PKEYS[S.books.length % PKEYS.length]);
+    $('#bColors').innerHTML = PKEYS.map((k) => `<label class="sw"><input type="radio" name="bColor" value="${k}"${k === cur ? ' checked' : ''}><span class="d" style="${dotStyle(k)}" aria-hidden="true"></span><span class="sr">${PAL[k].name}</span></label>`).join('');
+    $('#bookErr').textContent = '';
+    $('#bookDanger').innerHTML = b ? `<button type="button" class="link danger" data-act="book-del">Delete book</button>` : '';
+    openSheet('sheetBook');
+    if (!b) setTimeout(() => $('#bTitle').focus(), 60);
+  }
+  function submitBook(e) {
+    e.preventDefault();
+    const title = $('#bTitle').value.trim().replace(/\s+/g, ' ');
+    const author = $('#bAuthor').value.trim().replace(/\s+/g, ' ');
+    const pr = parseInt($('#bPages').value.replace(/\D/g, ''), 10);
+    const pages = Number.isFinite(pr) && pr > 0 ? pr : null;
+    const color = ($('input[name="bColor"]:checked') || {}).value || 'moss';
+    if (!title) { $('#bookErr').textContent = 'Give the book a title.'; $('#bTitle').focus(); return; }
+    const now = Date.now();
+    if (BK && BK.id) {
+      const b = S.books.find((x) => x.id === BK.id);
+      if (pages && b.marks.some((m) => m.page > pages)) { $('#bookErr').textContent = `You have marks past page ${pages}. Check the total.`; return; }
+      Object.assign(b, { title, author, pages, color });
+      putBook(b); closeSheets(); render(); toast('Book updated');
+    } else {
+      const b = { id: newId('b'), title, author, pages, color, created: now, touched: now, marks: [] };
+      S.books.push(b); V.lastBookId = b.id;
+      putBook(b); closeSheets();
+      V.name = 'book'; V.bookId = b.id; render(); window.scrollTo(0, 0);
+      toast(`Added ${title}`, { label: 'Mark a page', act: () => openMark(b.id) });
+    }
+  }
+  function deleteBook() {
+    const b = S.books.find((x) => x.id === BK.id); if (!b) return;
+    const ids = new Set(b.marks.map((m) => m.id));
+    const hadLinks = S.links.some((l) => ids.has(l.a) || ids.has(l.b));
+    S.books = S.books.filter((x) => x.id !== b.id);
+    S.links = S.links.filter((l) => !ids.has(l.a) && !ids.has(l.b));
+    if (V.lastBookId === b.id) V.lastBookId = null;
+    dropBook(b.id); if (hadLinks) putMeta(); else cacheLocal();
+    closeSheets(); V.name = 'shelf'; render(); toast(`Deleted ${b.title}`);
+  }
+
+  let DT = null;
+  function openDetail(id) { DT = { id }; renderDetail(); openSheet('sheetDetail'); }
+  function renderDetail() {
+    const f = DT && findMark(DT.id);
+    if (!f) { closeSheets(); return; }
+    const { m, b } = f;
+    const ls = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
+    const body = $('#detailBody');
+    setAcc(body, b.color);
+    body.innerHTML = `
+      <div class="sheet-head"><button type="button" class="link" data-act="close">Close</button><h2>Page ${m.page}</h2><button type="submit" form="detailForm" class="link strong">Save</button></div>
+      <p class="eyebrow" style="color:var(--acc)">${esc(b.title)} · revisit ${relDays(dueAt(m))}</p>
+      <form id="detailForm" class="sheet-in" style="padding:0" novalidate>
+        <div class="field"><label class="lbl" for="dPage">Page</label><input id="dPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${m.page}"></div>
+        <div class="field"><label class="lbl" for="dText">Your line</label><textarea id="dText" class="tx" rows="3" maxlength="280">${esc(m.text)}</textarea></div>
+        <p class="err-msg" id="dErr" role="alert"></p>
+      </form>
+      <div class="field"><span class="lbl">See also</span>
+      ${ls.length ? `<ul class="group" style="box-shadow:none;background:var(--fill)">${ls.map(({ l, o }) => `<li class="g-stack"><span class="top"><button type="button" class="ref" data-act="goto-mark" data-id="${esc(o.m.id)}">${esc(shortRef(o.b))} ${o.m.page}</button><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p><span><button type="button" class="link danger" style="font-size:15px" data-act="unlink" data-id="${esc(l.id)}">Remove link</button></span></li>`).join('')}</ul>`
+        : `<p class="help" style="padding:0 4px">No links yet. Is this like something you marked in another book?</p>`}</div>
+      <button type="button" class="btn primary lg block" data-act="link-from" data-id="${esc(m.id)}"${allMarks().length > 1 ? '' : ' disabled'}>${I.link}This is like…</button>
+      <button type="button" class="link danger" style="align-self:center" data-act="del-mark">Delete mark</button>`;
+  }
+  function submitDetail(e) {
+    e.preventDefault();
+    const f = findMark(DT.id); if (!f) return;
+    const page = parseInt($('#dPage').value.replace(/\D/g, ''), 10);
+    const text = $('#dText').value.trim().replace(/\s+/g, ' ');
+    if (!Number.isFinite(page) || page < 1) { $('#dErr').textContent = 'Enter the page number, like 83.'; return; }
+    if (f.b.pages && page > f.b.pages) { $('#dErr').textContent = `This book has ${f.b.pages} pages.`; return; }
+    if (!text) { $('#dErr').textContent = 'The line can’t be empty.'; return; }
+    f.m.page = page; f.m.text = text; f.b.touched = Date.now();
+    putBook(f.b); closeSheets(); render(); toast('Mark updated');
+  }
+  function deleteMark() {
+    const f = findMark(DT.id); if (!f) return;
+    f.b.marks = f.b.marks.filter((x) => x.id !== f.m.id);
+    const before = S.links.length;
+    S.links = S.links.filter((l) => l.a !== f.m.id && l.b !== f.m.id);
+    putBook(f.b); if (S.links.length !== before) putMeta();
+    closeSheets(); render(); toast(`Deleted the mark on page ${f.m.page}`);
+  }
+
+  // Link flow: "this is like that"
+  let LK = null;
+  function openLink(fromId, toId) {
+    const f = findMark(fromId); if (!f) return;
+    LK = { from: fromId, to: toId || null, q: '', ai: null, because: '' };
+    setAcc($('#linkBody'), f.b.color);
+    renderLink(); openSheet('sheetLink');
+  }
+  const pairHtml = (label, f) => `<div class="pair"><span class="src">${label} · ${esc(f.b.title)} · p.${f.m.page}</span><p>${esc(f.m.text)}</p></div>`;
+  function renderLink() {
+    const f = findMark(LK.from);
+    $('#linkBody').innerHTML = `
+      <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2>This is like that</h2><button type="button" class="link strong" id="linkSave" data-act="link-save" disabled>Connect</button></div>
+      ${pairHtml('This', f)}
+      <div class="islike"><i aria-hidden="true"></i>is like</div>
+      <div id="linkThat"></div>
+      <div class="field"><label class="lbl" for="linkBecause">Because…</label>
+        <textarea id="linkBecause" class="tx" rows="2" maxlength="240" placeholder="What do they share? Say it in your words."></textarea>
+        <p class="help">You write the why. That sentence is the part that sticks.</p></div>
+      <p class="err-msg" id="linkErr" role="alert"></p>`;
+    $('#linkBecause').value = LK.because;
+    renderThat();
+  }
+  function renderThat() {
+    const el = $('#linkThat');
+    if (LK.to) {
+      el.innerHTML = pairHtml('That', findMark(LK.to)) + `<button type="button" class="link" data-act="link-change">Choose a different mark</button>`;
+    } else {
+      el.innerHTML = `<div class="field"><label class="lbl" for="linkQ">Find the other mark</label><input id="linkQ" class="input" type="search" placeholder="Search your marks" autocomplete="off" value="${esc(LK.q)}"></div>
+        ${Cap.sample ? `<div class="row" style="margin-top:10px"><button type="button" class="btn tinted" data-act="link-ai"${LK.ai === 'loading' ? ' disabled' : ''}>${I.spark}${LK.ai === 'loading' ? 'Looking…' : 'Suggest matches'}</button><span class="help">Claude points. You explain.</span></div>` : ''}
+        ${LK.ai && LK.ai.err ? `<p class="help" style="margin-top:6px">${esc(LK.ai.err)}</p>` : ''}
+        <ul class="picker" id="linkList" style="margin-top:10px">${pickerItems()}</ul>`;
+    }
+    updateLinkSave();
+  }
+  function pickerItems() {
+    const from = findMark(LK.from);
+    const aiIds = Array.isArray(LK.ai) ? LK.ai : [];
+    let cands = allMarks().filter(({ m }) => m.id !== LK.from && !isLinked(LK.from, m.id));
+    if (LK.q.trim()) {
+      const ql = LK.q.trim().toLowerCase(), qt = toks(LK.q);
+      cands = cands.map((c) => ({ c, s: score(qt, toks(c.m.text + ' ' + c.b.title + ' ' + (c.b.author || ''))) + (c.m.text.toLowerCase().includes(ql) ? 2 : 0) + (String(c.m.page) === ql ? 5 : 0) }))
+        .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.c);
+    } else {
+      cands.sort((x, y) => (x.b.id === from.b.id) - (y.b.id === from.b.id) || (y.b.touched || 0) - (x.b.touched || 0) || x.m.page - y.m.page);
+    }
+    const ai = aiIds.map(findMark).filter((x) => x && cands.some((c) => c.m.id === x.m.id));
+    const list = [...ai.map((x) => ({ ...x, ai: true })), ...cands.filter((c) => !aiIds.includes(c.m.id))].slice(0, 40);
+    if (!list.length) return `<li class="help" style="padding:14px">${LK.q.trim() ? 'No marks match that search.' : 'No other marks yet. Mark a page in another book first.'}</li>`;
+    return list.map(({ m, b, ai: isAi }) => `<li><button type="button" data-act="link-pick" data-id="${esc(m.id)}"><span class="ref" data-acc style="${accStyle(b.color)}">${esc(shortRef(b))} ${m.page}</span><span class="pt">${esc(m.text)}</span>${isAi ? '<span class="tag">AI pick</span>' : ''}</button></li>`).join('');
+  }
+  function updateLinkSave() {
+    const btn = $('#linkSave'); if (!btn) return;
+    btn.disabled = !(LK.to && (LK.because.trim().match(/\S+/g) || []).length >= 2);
+  }
+  function saveLink() {
+    const because = LK.because.trim().replace(/\s+/g, ' ');
+    if (!LK.to) { $('#linkErr').textContent = 'Choose the other mark first.'; return; }
+    if ((because.match(/\S+/g) || []).length < 2) { $('#linkErr').textContent = 'Write a few words on why they’re alike.'; return; }
+    const a = findMark(LK.from), b = findMark(LK.to);
+    if (!a || !b) return;
+    S.links.push({ id: newId('l'), a: LK.from, b: LK.to, because, at: Date.now() });
+    putMeta(); closeSheets(); render();
+    toast(`Linked to ${shortRef(b.b)} ${b.m.page}`);
+  }
+  function sampleErr(e) {
+    const code = e && e.code;
+    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) { Cap.sample = null; return 'Claude isn’t available on this page, so only your own search runs.'; }
+    if (code === 'rate_limited') return 'Too many requests right now. Try again in a minute.';
+    if (code === 'session_expired') return 'Your Claude session expired. Sign in again, then retry.';
+    if (code === 'invalid_json') return 'Claude’s answer couldn’t be read. Try again.';
+    if (code === 'cancelled') return '';
+    return 'Couldn’t reach Claude. Try again.';
+  }
+  function noteLines(list, budget) {
+    let out = '';
+    for (const { m, b } of list) { const line = `${m.id} | ${b.title} (${shortRef(b)}) | p.${m.page} | ${m.text}\n`; if (budget - line.length < 0) break; budget -= line.length; out += line; }
+    return out;
+  }
+  async function suggestLinks() {
+    if (!Cap.sample || !LK) return;
+    const from = findMark(LK.from);
+    const others = allMarks().filter(({ m }) => m.id !== LK.from && !isLinked(LK.from, m.id));
+    if (!others.length) return;
+    const prompt = `A reader keeps an index of paper books: page numbers plus one line in their own words. They link two notes when one idea is like another ("this is like that").
+
+NEW NOTE: ${from.b.title} | p.${from.m.page} | ${from.m.text}
+
+OTHER NOTES (id | book | page | note):
+${noteLines(others, 40000)}
+Pick up to 3 other notes whose idea is genuinely alike or analogous to the new note. Prefer notes from other books. Never invent ids. Do not explain. Reply with only a JSON array of ids, best first, like ["m123","m456"]. Reply [] if nothing truly fits.`;
+    const keep = LK;
+    LK.ai = 'loading'; renderThat();
+    try {
+      const r = await Cap.sample.json(prompt, { modelTier: 'quick' });
+      if (LK !== keep) return;
+      const ids = Array.isArray(r) ? r.map(String).filter((id) => findMark(id) && id !== LK.from).slice(0, 3) : [];
+      LK.ai = ids.length ? ids : { err: 'Claude didn’t find a close match. Search your marks instead.' };
+    } catch (e) { if (LK !== keep) return; LK.ai = { err: sampleErr(e) }; }
+    if (findMark(LK.from)) renderThat();
+  }
+  async function askAi() {
+    const q = V.ask.q.trim();
+    if (!q || !Cap.sample) return;
+    let links = '';
+    for (const l of S.links) { if (links.length > 8000) break; links += `${l.a} ~ ${l.b} | because: ${l.because}\n`; }
+    const prompt = `You help a reader search their OWN index of paper books. Use ONLY the notes below, never outside knowledge. Each note line is: id | book (author) | page | the reader's note in their own words. Links between notes, with the reader's reason, follow.
+
+QUESTION: ${q}
+
+NOTES
+${noteLines(allMarks(), 42000)}
+LINKS
+${links || '(none)'}
+
+Reply with only JSON of this shape: {"ids": ["m123"], "answer": "", "gap": ""}
+- ids: up to 4 note ids that best answer the question, best first. [] if none fit.
+- answer: one or two plain sentences answering from those notes only, citing like (Kahneman p.344). "" if none fit.
+- gap: one short sentence naming what the reader's notes do not cover about this question, or "" if nothing important is missing.`;
+    const ctl = new AbortController();
+    V.ask.ctl = ctl; V.ask.ai = { status: 'loading' }; if (V.name === 'ask') render();
+    try {
+      const r = await Cap.sample.json(prompt, { modelTier: 'quick', signal: ctl.signal });
+      const ids = r && Array.isArray(r.ids) ? r.ids.map(String).filter((id) => findMark(id)).slice(0, 4) : [];
+      V.ask.ai = { status: 'done', ids, answer: r && r.answer ? String(r.answer) : '', gap: r && r.gap ? String(r.gap) : '' };
+    } catch (e) { const msg = sampleErr(e); V.ask.ai = msg ? { status: 'error', msg, retry: !!Cap.sample } : null; }
+    V.ask.ctl = null;
+    if (V.name === 'ask') render();
+  }
+
+  // Revisit scheduling: pass → 3 days → 7 → growing; miss → tomorrow (Recall's steps).
+  function grade(ok) {
+    const f = findMark(V.rv.id); if (!f) return;
+    const n = ok ? ((f.m.rev && f.m.rev.n) || 0) + 1 : 0;
+    const days = ok ? STEPS[Math.min(n, STEPS.length - 1)] : 1;
+    f.m.rev = { n, due: Date.now() + days * DAY, last: Date.now() };
+    putBook(f.b);
+    V.rv.id = null; V.rv.shown = false; V.rv.done += 1;
+    render(); window.scrollTo(0, 0);
+    toast(ok ? `Next look in ${plural(days, 'day')}` : 'You’ll see it again tomorrow');
+  }
+
+  // Example shelf
+  function loadExamples() {
+    const now = Date.now();
+    const mk = (page, text, ago, dueIn) => ({ id: newId('m'), page, text, at: now - ago * DAY, rev: { n: 1, due: now + dueIn * DAY } });
+    const books = [
+      { title: 'Basic Economics', author: 'Thomas Sowell', pages: 700, color: 'ember', t: 3, marks: [
+        mk(12, 'Scarcity: any use of a thing is a use denied elsewhere', 40, 6), mk(27, 'Prices are signals, not just costs', 38, -0.1),
+        mk(48, 'Rent control shrinks the housing it means to protect', 36, 9), mk(83, 'Opportunity cost: the real price is the next-best option', 33, 12),
+        mk(112, 'Every policy has a second act nobody votes on', 30, -0.05), mk(140, 'Incentives beat intentions', 27, 4)] },
+      { title: 'Thinking, Fast and Slow', author: 'Daniel Kahneman', pages: 500, color: 'indigo', t: 1, marks: [
+        mk(20, 'Two systems: fast intuition and slow effort', 25, 8), mk(119, 'Anchoring: the first number drags the estimate', 22, 2),
+        mk(283, 'Losses feel about twice as strong as gains', 19, -0.2), mk(344, 'Sunk cost: we keep paying because we already paid', 16, 5),
+        mk(410, 'We judge an experience by its peak and its end', 12, 10)] },
+      { title: 'The Psychology of Money', author: 'Morgan Housel', pages: 256, color: 'lagoon', t: 0, marks: [
+        mk(19, 'Your own experience sets your view of risk', 9, 3), mk(39, 'Knowing when you have enough', 7, 6),
+        mk(74, 'Compounding rewards time more than brilliance', 5, 1), mk(143, 'Room for error keeps you in the game', 2, 1)] }
+    ].map((b, i) => { const { t, ...rest } = b; return { id: newId('b'), created: now - (50 - i) * DAY, touched: now - t * DAY, example: true, ...rest }; });
+    const find = (bi, page) => books[bi].marks.find((m) => m.page === page).id;
+    const links = [
+      [find(0, 83), find(1, 344), 'Both say the past is spent. Only the next choice counts.'],
+      [find(1, 283), find(2, 19), 'Fear of loss is learned from what you lived through.'],
+      [find(0, 112), find(2, 143), 'You have to plan for consequences you can’t see yet.']
+    ].map(([a, b, because]) => ({ id: newId('l'), a, b, because, at: now - DAY, example: true }));
+    S.books.push(...books); S.links.push(...links); S.examples = true;
+    for (const b of books) putBook(b);
+    putMeta();
+    V.name = 'shelf'; render();
+    toast('Example shelf loaded');
+  }
+  function clearExamples() {
+    const ex = S.books.filter((b) => b.example);
+    const ids = new Set(ex.flatMap((b) => b.marks.map((m) => m.id)));
+    S.books = S.books.filter((b) => !b.example);
+    S.links = S.links.filter((l) => !l.example && !ids.has(l.a) && !ids.has(l.b));
+    S.examples = false;
+    if (V.bookId && !S.books.some((b) => b.id === V.bookId)) V.name = 'shelf';
+    for (const b of ex) dropBook(b.id);
+    putMeta();
+    V.ask = { q: '', res: null, ai: null, ctl: null };
+    closeSheets(); render(); toast('Examples removed');
+  }
+
+  // Menu
+  function openMenu() {
+    const st = mode === 'cloud'
+      ? ['cloud', 'Synced to your Claude account', 'Your marks are private to you, even if you share this page.']
+      : mode === 'device'
+        ? ['device', 'This browser only', 'Open Cairn from claude.ai to keep your shelf in your account.']
+        : ['memory', 'Not saved', 'This view can’t store data, so marks disappear when you close it.'];
+    $('#menuBody').innerHTML = `
+      <div class="sheet-head"><span></span><h2>Cairn</h2><button type="button" class="link strong" data-act="close">Done</button></div>
+      <ul class="group" style="box-shadow:none;background:var(--fill)"><li class="g-stack"><span class="status ${st[0]}"><i aria-hidden="true"></i><span><b style="font-weight:600">${st[1]}</b><br><span class="help">${st[2]}</span></span></span></li></ul>
+      <ul class="group" style="box-shadow:none;background:var(--fill)">
+        <li><button type="button" class="g-row acc" data-act="book-new">Add a book</button></li>
+        ${Cap.downloads && allMarks().length ? `<li><button type="button" class="g-row acc" data-act="export">Export index as Markdown</button></li>` : ''}
+        ${S.examples ? `<li><button type="button" class="g-row danger" data-act="clear-examples">Remove example shelf</button></li>` : ''}
+      </ul>
+      <p class="sec-h" style="margin:4px 0 0">How it works</p>
+      <ol class="steps">
+        <li><span><b>Mark.</b> When a page matters, write its number and one line in your own words.</span></li>
+        <li><span><b>Link.</b> When one idea is like another, connect them and write why.</span></li>
+        <li><span><b>Ask.</b> Cairn walks your shelf and points to the book and the page.</span></li>
+        <li><span><b>Revisit.</b> Recall what a page held before you look. The gaps grow as you remember.</span></li>
+      </ol>`;
+    openSheet('sheetMenu');
+  }
+  async function exportMd() {
+    if (!Cap.downloads) return;
+    let md = `# My Cairn index\n\nExported ${new Date().toLocaleDateString()}\n`;
+    for (const b of shelfOrder()) {
+      md += `\n## ${b.title}${b.author ? ' — ' + b.author : ''}\n\n`;
+      for (const m of [...b.marks].sort((x, y) => x.page - y.page)) {
+        md += `- p.${m.page} · ${m.text}\n`;
+        for (const { l, other } of linksOf(m.id)) { const o = findMark(other); if (o) md += `  - see also: ${o.b.title}, p.${o.m.page} (because: ${l.because})\n`; }
+      }
+    }
+    try { const r = await Cap.downloads.save({ filename: 'cairn-index.md', data: md }); if (r && r.status === 'saved') toast('Index exported'); }
+    catch (e) { if (e && e.code === 'unavailable') Cap.downloads = null; if (e && !['cancelled', 'declined', 'user_declined'].includes(e.code)) toast('The export didn’t finish. Try again.'); }
+  }
+
+  // Toast
+  let toastTimer = null;
+  function toast(msg, action) {
+    const el = $('#toast');
+    el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ''}`;
+    el.hidden = false;
+    if (action) el.querySelector('button').addEventListener('click', () => { el.hidden = true; action.act(); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, action ? 6500 : 3000);
+  }
+
+  // ---------- Events ----------
+  const ACT = {
+    go: (t) => go(t.dataset.to),
+    'open-book': (t) => { V.bookId = t.dataset.id; go('book'); },
+    'book-new': () => openBook(null),
+    'book-edit': (t) => openBook(t.dataset.id),
+    'book-del': (t) => armed('book-' + BK.id, t, 'Tap again to delete the book and its marks', deleteBook),
+    'mark-new': (t) => openMark(t.dataset.book),
+    'open-mark': (t) => openDetail(t.dataset.id),
+    'goto-mark': (t) => { const f = findMark(t.dataset.id); if (!f) return; closeSheets(); V.bookId = f.b.id; V.flash = f.m.id; V.name = 'book'; render(); },
+    sort: (t) => { V.sort = t.dataset.sort; render(); },
+    close: () => closeSheets(),
+    'del-mark': (t) => armed('mark-' + DT.id, t, 'Tap again to delete', deleteMark),
+    unlink: (t) => armed('link-' + t.dataset.id, t, 'Tap again to remove', () => { S.links = S.links.filter((l) => l.id !== t.dataset.id); putMeta(); renderDetail(); render(); toast('Link removed'); }),
+    'link-from': (t) => openLink(t.dataset.id),
+    'link-pick': (t) => { LK.to = t.dataset.id; renderThat(); setTimeout(() => $('#linkBecause').focus(), 30); },
+    'link-change': () => { LK.to = null; renderThat(); },
+    'link-ai': () => suggestLinks(),
+    'link-save': () => saveLink(),
+    'ask-try': (t) => { V.ask.q = t.textContent; const i = $('#askQ'); if (i) i.value = V.ask.q; V.ask.res = search(V.ask.q); V.ask.ai = null; render(); },
+    'ask-ai': () => askAi(),
+    'ask-stop': () => { if (V.ask.ctl) V.ask.ctl.abort(); },
+    'rv-start': () => { V.rv.started = true; render(); },
+    'rv-show': () => { V.rv.shown = true; render(); },
+    'rv-got': () => grade(true),
+    'rv-forgot': () => grade(false),
+    'rv-practice': () => { const all = allMarks(); const p = all[Math.floor(Math.random() * all.length)]; V.rv = { ...V.rv, id: p.m.id, shown: false, started: true }; render(); },
+    'load-examples': () => loadExamples(),
+    'clear-examples': () => clearExamples(),
+    menu: () => openMenu(),
+    export: () => exportMd()
+  };
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-act]');
+    if (!t || t.disabled) return;
+    const fn = ACT[t.dataset.act];
+    if (fn) { e.preventDefault(); fn(t, e); }
+  });
+  document.addEventListener('submit', (e) => {
+    const id = e.target.id;
+    if (id === 'markForm') submitMark(e);
+    else if (id === 'bookForm') submitBook(e);
+    else if (id === 'detailForm') submitDetail(e);
+    else if (id === 'askForm') {
+      e.preventDefault();
+      V.ask.q = $('#askQ').value.trim();
+      if (V.ask.ctl) V.ask.ctl.abort();
+      V.ask.ai = null; V.ask.res = V.ask.q ? search(V.ask.q) : null;
+      $('#askQ').blur(); render();
+    }
+  });
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.id === 'linkQ') { LK.q = t.value; $('#linkList').innerHTML = pickerItems(); }
+    else if (t.id === 'linkBecause') { LK.because = t.value; $('#linkErr').textContent = ''; updateLinkSave(); }
+    else if (t.id === 'askQ') V.ask.q = t.value;
+    else if (t.id === 'markText') {
+      const n = (t.value.trim().match(/\S+/g) || []).length;
+      $('#markHint').textContent = n > 20 ? `${n} words. Can you say it in fewer? Short lines are easier to scan later.` : 'Short beats complete. Six to twelve words is plenty.';
+    } else if (t.id === 'markPage' || t.id === 'bPages' || t.id === 'dPage') {
+      const clean = t.value.replace(/\D/g, '').slice(0, 5); if (clean !== t.value) t.value = clean;
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.id === 'markPage') { e.preventDefault(); $('#markText').focus(); }
+    else if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'markText') { e.preventDefault(); $('#markForm').requestSubmit(); }
+  });
+
+  // ---------- Boot ----------
+  const local = loadLocal();
+  if (local) S = normalize(local);
+  mode = localOk() ? 'device' : 'memory';
+  render();
+  initCaps();
+})();
+</script>
+</body>
+</html>

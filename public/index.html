@@ -53,7 +53,7 @@
   <form id="markForm" class="sheet-in" novalidate>
     <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="markH">Mark a page</h2><button type="submit" class="link strong">Add</button></div>
     <fieldset class="field"><legend>Book</legend><div class="chips" id="markBooks"></div></fieldset>
-    <div class="field"><div class="unit-row"><label class="lbl" for="markPage" id="markPageLbl">Page</label><span id="markUnit"></span></div><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"></div>
+    <div class="field"><div class="unit-row"><label class="lbl" for="markPage" id="markPageLbl">Page</label><span id="markUnit"></span></div><input id="markPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="next"><p class="help" id="markSpotHint"></p></div>
     <div class="field"><label class="lbl" for="markText">In your own words</label><textarea id="markText" class="tx" rows="2" maxlength="280" placeholder="What this page says, in one line"></textarea><p class="help" id="markHint">Short beats complete. Six to twelve words is plenty.</p></div>
     <p class="err-msg" id="markErr" role="alert"></p>
   </form>

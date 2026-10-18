@@ -81,6 +81,12 @@ docs/screens/             screenshots
 - **Deleting**: tap Delete twice, as in margin. Deleting a book deletes its marks and their links. Deletes sync as soft deletes.
 - **Sync**: the same scheme as recall. Each row carries `updated_at`; changes go up in batches, and each device pulls rows newer than the last `server_ts` it saw. If a device holds a different account's shelf, it asks before replacing it.
 
+## Marking while you read
+The quickest way to capture is the moment something matters, with your phone beside the book:
+- **⋯ → Open Cairn on → Mark a page.** Opening the app goes straight to the mark sheet (also when you come back to it after 5 minutes away), with the book you last marked already picked.
+- **Your last spot is filled in.** The page or location box starts at your last mark in that book, cursor at the end, so you usually change only the last digits. Enter jumps to the line; Enter again saves.
+- **Shortcut:** on Android and in the installed desktop app (Chrome or Edge), the app icon has a *Mark a page* shortcut (long-press or right-click). iPhone and iPad don't offer shortcuts for web apps, so use the setting above.
+
 ## Kindle
 Books can be **Paper** or **Kindle** (set it when you add or edit a book). Kindle books are numbered by location, plus the page when the book has real page numbers; the index, Revisit and Ask show whichever the book uses. Mark a Kindle spot by hand with the Location / Page switch, or import highlights. **Import** is the ↓ button on the shelf, or **⋯ → Import from Kindle**.
 

@@ -373,3 +373,4 @@ body.in-book .toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
 .ib .lbl { font: 700 12px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
 .ib .tx { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--fill2); font-style: normal; }
 .ib .tx:focus { box-shadow: 0 0 0 2px var(--acc); }
+#markSpotHint:empty { display: none; }

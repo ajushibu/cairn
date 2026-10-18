@@ -69,7 +69,8 @@ const emptyStore = () => ({ books: {}, marks: {}, links: {}, lastSync: {}, owner
 let store = Object.assign(emptyStore(), loadJSON(STORE_KEY, {}));
 store.drafted = store.drafted || {};
 const CFG = window.CAIRN_CONFIG || {};
-let config = Object.assign({ theme: 'system', sort: 'page' }, loadJSON(CONFIG_KEY, {}));
+// startOn: what opening the app shows ('shelf' or 'mark'). lastBookId: the book you last marked, picked first next time.
+let config = Object.assign({ theme: 'system', sort: 'page', startOn: 'shelf', lastBookId: null }, loadJSON(CONFIG_KEY, {}));
 
 let persistTimer;
 function persist() { clearTimeout(persistTimer); persistTimer = setTimeout(persistNow, 200); }
@@ -285,7 +286,7 @@ async function initSupabase() {
 }
 
 /* ───────────── UI state ───────────── */
-const V = { name: 'shelf', bookId: null, lastBookId: null, flash: null, inboxShow: 30,
+const V = { name: 'shelf', bookId: null, flash: null, inboxShow: 30,
   ask: { q: '', res: null, ai: null, ctl: null }, rv: { id: null, shown: false, done: 0, started: false } };
 let deferredInstall = null;
 
@@ -543,6 +544,7 @@ function viewInbox() {
 const IDEAS = [
   { when: 'Every reading session', items: [
     { t: 'One page, one line', d: 'End each sitting by marking the one page you’d want to find again. One good line beats five copied sentences.', a: ['mark-new', 'Mark a page'] },
+    { t: 'Phone beside the book', d: 'In ⋯, set Open Cairn on to Mark a page. Opening the app then goes straight to the mark sheet with your book picked and your last page or location filled in. Change the last digits, write one line, done.', a: ['menu', 'Open settings'] },
     { t: 'Mark the claim, not the fact', d: 'Write what the page argues or why it matters (“rent control shrinks supply”), not a date or a name. Claims are what you’ll search for later.' },
     { t: 'Mark disagreements too', d: 'When you think the author is wrong, mark it and say why. Your objections belong in your index as much as your agreements.' }
   ] },
@@ -682,7 +684,8 @@ let MK = { unit: 'page' };
 function openMark(bookId) {
   if (!S.books.length) { openBook(null); toast('Add the book first, then mark its pages.'); return; }
   const order = shelfOrder();
-  const bid = bookId || (V.name === 'book' && V.bookId) || V.lastBookId || order[0].id;
+  const last = S.books.some((b) => b.id === config.lastBookId) ? config.lastBookId : null;
+  const bid = bookId || (V.name === 'book' && V.bookId) || last || order[0].id;
   $('#markBooks').innerHTML = order.map((b) => `<label class="bk"><input type="radio" name="markBook" value="${esc(b.id)}"${b.id === bid ? ' checked' : ''}><span class="d" style="${dotStyle(b.color)}" aria-hidden="true"></span><span>${esc(b.title)}</span></label>`).join('');
   $('#markPage').value = ''; $('#markText').value = ''; $('#markErr').textContent = '';
   $('#markHint').textContent = 'Short beats complete. Six to twelve words is plenty.';
@@ -691,7 +694,23 @@ function openMark(bookId) {
   renderMarkUnit();
   openSheet('sheetMark');
   const chk = $('#markBooks input:checked'); if (chk) chk.parentElement.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  setTimeout(() => $('#markPage').focus(), 60);
+  setTimeout(focusSpot, 60);
+}
+// The page or location box starts at your last spot in that book, cursor at the end, so you change only the last digits.
+function lastSpot(b, unit) {
+  const m = [...b.marks].sort((x, y) => y.at - x.at).find((x) => (unit === 'loc' ? x.loc : x.page) != null);
+  return m ? (unit === 'loc' ? m.loc : m.page) : null;
+}
+function prefillSpot() {
+  const sel = $('input[name="markBook"]:checked');
+  const b = sel && S.books.find((x) => x.id === sel.value);
+  const v = b ? lastSpot(b, MK.unit) : null;
+  $('#markPage').value = v ? String(v) : '';
+  $('#markSpotHint').textContent = v ? `Starts at your last ${MK.unit === 'loc' ? 'location' : 'page'}, ${fmtN(v)}. Change the end.` : '';
+}
+function focusSpot() {
+  const i = $('#markPage'); if (!i) return;
+  i.focus(); const n = i.value.length; try { i.setSelectionRange(n, n); } catch { /* some inputs refuse */ }
 }
 function renderMarkUnit() {
   const sel = $('input[name="markBook"]:checked');
@@ -700,6 +719,7 @@ function renderMarkUnit() {
   if (!kindle) MK.unit = 'page';
   $('#markUnit').innerHTML = kindle ? miniSeg('mark-unit', MK.unit, [['loc', 'Location'], ['page', 'Page']]) : '';
   $('#markPageLbl').textContent = MK.unit === 'loc' ? 'Location' : 'Page';
+  prefillSpot();
 }
 function submitMark(e) {
   e.preventDefault();
@@ -715,7 +735,7 @@ function submitMark(e) {
   if (b.pages && sameUnit && n > b.pages) { err.textContent = `This book has ${fmtN(b.pages)} ${unitWord(b)}. Check the ${word}.`; $('#markPage').focus(); return; }
   if (!text) { err.textContent = 'Write one line about it in your own words.'; $('#markText').focus(); return; }
   const m = addMark(b.id, MK.unit === 'loc' ? { loc: n, text } : { page: n, text });
-  bump(b.id); V.lastBookId = b.id;
+  bump(b.id); config.lastBookId = b.id; saveConfig();
   changed(); closeSheets();
   if (V.name === 'book' && V.bookId === b.id) V.flash = m.id;
   render();
@@ -758,7 +778,7 @@ function submitBook(e) {
     changed(); closeSheets(); render(); toast('Book updated');
   } else {
     const b = addBook({ title, author, pages, color, kind: BK.kind });
-    V.lastBookId = b.id;
+    config.lastBookId = b.id; saveConfig();
     changed(); closeSheets();
     V.name = 'book'; V.bookId = b.id; render(); window.scrollTo(0, 0);
     toast(`Added ${title}`, { label: BK.kind === 'kindle' ? 'Import highlights' : 'Mark a page', act: () => (BK.kind === 'kindle' ? openImport(b.id) : openMark(b.id)) });
@@ -770,7 +790,7 @@ function deleteBook() {
   rec.deleted = true; touch(rec);
   ids.forEach((id) => { store.marks[id].deleted = true; touch(store.marks[id]); });
   Object.values(store.links).forEach((l) => { if (!l.deleted && (ids.has(l.a) || ids.has(l.b))) { l.deleted = true; touch(l); } });
-  if (V.lastBookId === rec.id) V.lastBookId = null;
+  if (config.lastBookId === rec.id) { config.lastBookId = null; saveConfig(); }
   changed(); closeSheets(); V.name = 'shelf'; render(); toast(`Deleted ${rec.title}`);
 }
 
@@ -1219,6 +1239,8 @@ function renderMenu() {
       ${deferredInstall ? `<li><button type="button" class="g-row acc" data-act="install">Install Cairn</button></li>` : ''}
       ${S.examples ? `<li><button type="button" class="g-row danger" data-act="clear-examples">Remove example shelf</button></li>` : ''}
     </ul>
+    <div class="field"><div class="unit-row"><span class="lbl">Open Cairn on</span>${miniSeg('start-on', config.startOn === 'mark' ? 'mark' : 'shelf', [['shelf', 'Shelf'], ['mark', 'Mark a page']])}</div>
+      <p class="help">Choose Mark a page to read with your phone beside you: opening the app goes straight to the mark sheet, with your book picked and your last spot filled in.</p></div>
     <div class="field"><span class="lbl">Appearance</span>
       <div class="seg theme-seg" role="group" aria-label="Appearance"><span class="thumb" aria-hidden="true" style="transform:translateX(${ti * 100}%)"></span>
         <button type="button" aria-pressed="${t === 'system'}" data-act="theme" data-v="system">Automatic</button><button type="button" aria-pressed="${t === 'light'}" data-act="theme" data-v="light">Light</button><button type="button" aria-pressed="${t === 'dark'}" data-act="theme" data-v="dark">Dark</button></div></div>
@@ -1285,7 +1307,8 @@ const ACT = {
   'book-kind': (t) => { BK.kind = t.dataset.v; renderBookKind(); },
   'book-del': (t) => armed('book-' + BK.id, t, 'Tap again to delete the book and its marks', deleteBook),
   'mark-new': (t) => openMark(t.dataset.book),
-  'mark-unit': (t) => { MK.unit = t.dataset.v; renderMarkUnit(); $('#markPage').focus(); },
+  'mark-unit': (t) => { MK.unit = t.dataset.v; renderMarkUnit(); focusSpot(); },
+  'start-on': (t) => { config.startOn = t.dataset.v; saveConfig(); renderMenu(); },
   'open-mark': (t) => openDetail(t.dataset.id),
   'goto-mark': (t) => { const f = findMark(t.dataset.id); if (!f) return; closeSheets(); V.bookId = f.b.id; V.flash = f.m.id; V.name = 'book'; render(); },
   sort: (t) => { config.sort = t.dataset.sort; saveConfig(); render(); },
@@ -1381,7 +1404,13 @@ function wire() {
     if (e.key === 'Enter' && e.target.id === 'markPage') { e.preventDefault(); $('#markText').focus(); }
     else if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'markText') { e.preventDefault(); $('#markForm').requestSubmit(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { syncNow(); if (V.name !== 'inbox') queueRender(); } });
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    syncNow(); if (V.name !== 'inbox') queueRender();
+    // Coming back to the app after a while counts as opening it.
+    if (config.startOn === 'mark' && hiddenAt && Date.now() - hiddenAt > 5 * 60000 && !$$('dialog[open]').length && S.books.length) openMark();
+  });
   window.addEventListener('online', syncNow);
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; });
   window.addEventListener('beforeunload', persistNow);
@@ -1394,6 +1423,9 @@ async function init() {
   derive();
   wire();
   render();
+  const wantMark = new URLSearchParams(location.search).has('mark') || config.startOn === 'mark';
+  if (location.search) history.replaceState(null, '', location.pathname);
+  if (wantMark && S.books.length) openMark();
   await initSupabase();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }

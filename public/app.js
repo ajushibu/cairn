@@ -1439,8 +1439,28 @@ async function importEpub(file) {
 const RD_THEMES = {
   light: { body: { color: '#1C1C1E', background: '#FFFFFF' }, '::selection': { background: 'rgba(43, 117, 86, .28)' } },
   sepia: { body: { color: '#3B2F23', background: '#F6EFE2' }, '::selection': { background: 'rgba(184, 80, 26, .22)' } },
-  dark: { body: { color: '#E5E5EA', background: '#121212' }, a: { color: '#6ED0A4' }, '::selection': { background: 'rgba(110, 208, 164, .32)' } }
+  dark: { body: { color: '#FFFFFF', background: '#000000' }, '::selection': { background: 'rgba(110, 208, 164, .38)' } }
 };
+const RD_PAGE = { light: ['#FFFFFF', '#1C1C1E'], sepia: ['#F6EFE2', '#3B2F23'], dark: ['#000000', '#FFFFFF'] };
+// A book's own stylesheet can colour its text (links, paragraphs). The reader's ink wins, so text is always readable on the page.
+function forceInk(contents, t) {
+  try {
+    const doc = contents.document; let st = doc.getElementById('cairn-ink');
+    if (!st) { st = doc.createElement('style'); st.id = 'cairn-ink'; doc.head.appendChild(st); }
+    const ink = (RD_PAGE[t] || RD_PAGE.light)[1];
+    st.textContent = `html, body, body * { color: ${ink} !important; -webkit-text-fill-color: ${ink} !important; } body a { text-decoration: underline; text-decoration-thickness: .5px; text-underline-offset: 3px; }`;
+  } catch { /* frame gone */ }
+}
+// The page behind the reader (and the browser's bar) takes the reader's colour, so no light strip shows under the controls.
+function rdChrome(on, t) {
+  const root = document.documentElement;
+  document.querySelectorAll('meta[name="theme-color"][data-rd]').forEach((m) => m.remove());
+  if (!on) { root.style.removeProperty('background-color'); document.body.style.removeProperty('background-color'); return; }
+  const bg = (RD_PAGE[t] || RD_PAGE.light)[0];
+  root.style.backgroundColor = bg; document.body.style.backgroundColor = bg;
+  const m = document.createElement('meta'); m.name = 'theme-color'; m.content = bg; m.dataset.rd = '1';
+  document.head.appendChild(m);
+}
 const RD_FONTS = { serif: 'ui-serif, "New York", "Iowan Old Style", Georgia, serif', sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif' };
 const R = { open: false, gen: 0, bookId: null, book: null, rend: null, sel: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false, saveT: null };
 const rdCfg = () => (config.reader = Object.assign({ size: 100, theme: 'auto', font: 'serif' }, config.reader || {}));
@@ -1499,6 +1519,7 @@ function closeReader(stay) {
   R.gen++;
   $('#viewer').innerHTML = ''; rdMsg('');
   $('#reader').hidden = true; document.body.classList.remove('in-reader');
+  if (!stay) rdChrome(false);
   if (!stay) { render(); }
 }
 async function loadLocations(b, gen) {
@@ -1594,6 +1615,7 @@ function clearSelection() {
 }
 function onContent(contents) {
   const doc = contents.document;
+  forceInk(contents, rdTheme());
   doc.addEventListener('selectionchange', () => {
     const s = doc.getSelection();
     if ((!s || s.isCollapsed) && R.sel && R.sel.contents === contents) { R.sel = null; rdBot(); }
@@ -1628,8 +1650,10 @@ function rdKey(e) {
 function applyReaderPrefs() {
   const c = rdCfg(), t = rdTheme();
   $('#reader').dataset.rt = t;
+  rdChrome(R.open, t);
   if (!R.rend) return;
   R.rend.themes.select(t);
+  try { R.rend.getContents().forEach((c) => forceInk(c, t)); } catch { /* not rendered yet */ }
   R.rend.themes.fontSize(c.size + '%');
   R.rend.themes.font(RD_FONTS[c.font] || RD_FONTS.serif);
   R.hl.clear(); setTimeout(paintHighlights, 60);   // re-layout drops the drawn highlights

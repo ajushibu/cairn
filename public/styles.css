@@ -52,9 +52,9 @@
 [data-acc] { --acc: var(--acc-b); }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { background-color: var(--grouped); }
+html { height: 100%; background-color: var(--grouped); }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--grouped); color: var(--ink); font: 400 17px/1.47 var(--text); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+body { margin: 0; min-height: 100%; min-height: 100dvh; background: var(--grouped); color: var(--ink); font: 400 17px/1.47 var(--text); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--grouped); }
 button, input, textarea { font: inherit; color: inherit; }

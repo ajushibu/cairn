@@ -53,6 +53,7 @@ const I = {
   link: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   spark: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
   check: '<svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  copy: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>',
   import: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>',
   camera: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
   file: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>',
@@ -839,7 +840,7 @@ function renderDetail() {
     <form id="detailForm" class="sheet-in" style="padding:0" novalidate>
       ${epub ? `<p class="help" style="margin:0">${esc([m.chapter, m.loc ? 'location ' + fmtN(m.loc) : ''].filter(Boolean).join(' · ') || 'In the book')}</p>${m.cfi ? `<button type="button" class="btn block" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Open in book</button>` : ''}` : both ? `<div class="two">${locField}${pageField}</div>` : pageField}
       <div class="field"><label class="lbl" for="dText">Your line</label><textarea id="dText" class="tx" rows="3" maxlength="280">${esc(m.text)}</textarea></div>
-      ${m.quote ? `<div class="field"><span class="lbl">${epub ? 'Highlighted' : 'Highlighted on Kindle'}</span><p class="quote">${esc(m.quote)}</p></div>` : ''}
+      ${m.quote ? `<div class="field"><div class="lbl-row"><span class="lbl">${epub ? 'Highlighted' : 'Highlighted on Kindle'}</span><button type="button" class="link copy-btn" data-act="copy-quote">${I.copy}Copy</button></div><p class="quote">${esc(m.quote)}</p></div>` : ''}
       <p class="err-msg" id="dErr" role="alert"></p>
     </form>
     <div class="field"><span class="lbl">See also</span>
@@ -1435,6 +1436,17 @@ async function importEpub(file) {
   openReader(rec.id);
 }
 
+// Copies text to the clipboard. Falls back to a hidden textarea where the clipboard API isn't allowed.
+async function copyText(text) {
+  text = String(text || '').trim(); if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast('Copied'); return; } catch { /* try the older way */ }
+  try {
+    const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy'); ta.remove();
+    toast(ok ? 'Copied' : 'Couldn’t copy. Press and hold the text to copy it.');
+  } catch { toast('Couldn’t copy. Press and hold the text to copy it.'); }
+}
 /* ───────────── reader ───────────── */
 // epub.js renders the book in a sandboxed iframe (no scripts). Positions are EPUB CFIs; "loc" numbers are
 // epub.js locations of about 1,000 characters, counted once per book and kept on this device.
@@ -1792,7 +1804,7 @@ function openReaderMark(existingId) {
   body.innerHTML = `<form id="rmForm" class="sheet-in" style="padding:0" novalidate>
       <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2>${RM.id ? 'Your highlight' : RM.quote ? 'Mark this line' : 'Mark this page'}</h2><button type="submit" class="link strong">Keep</button></div>
       ${where ? `<p class="eyebrow" style="color:var(--acc)">${esc(where)}</p>` : ''}
-      ${RM.quote ? `<p class="quote clamp">${esc(RM.quote)}</p>` : ''}
+      ${RM.quote ? `<div class="field"><div class="lbl-row"><span class="lbl">Highlighted</span><button type="button" class="link copy-btn" data-act="copy-quote">${I.copy}Copy</button></div><p class="quote clamp">${esc(RM.quote)}</p></div>` : ''}
       <div class="field"><label class="lbl" for="rmText">Your line</label><textarea id="rmText" class="tx" rows="2" maxlength="280" placeholder="What this says, in your own words">${esc(RM.text)}</textarea>
         <p class="help">${RM.quote ? 'Write it now, or tap Later and write it in your Inbox.' : 'One line about this page in your own words.'}</p></div>
       <p class="err-msg" id="rmErr" role="alert"></p>
@@ -1885,6 +1897,7 @@ const ACT = {
   'rd-mark': () => openReaderMark(),
   'rd-mark-spot': () => openReaderMark(),
   'rd-sel-clear': () => clearSelection(),
+  'copy-quote': (t) => copyText(((t.closest('.field') || document).querySelector('.quote') || {}).textContent || ''),
   'rd-extend': () => {
     if (!R.sel || !R.rend) return;
     let range; try { range = R.sel.contents.range(R.sel.cfi); } catch { range = null; }
@@ -2001,6 +2014,6 @@ async function init() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-window.Cairn = { get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
+window.Cairn = { openDetail, get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
 init();
 })();

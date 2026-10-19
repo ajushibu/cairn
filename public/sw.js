@@ -1,6 +1,6 @@
 // Network-first for the app shell (so updates arrive), cache fallback for offline.
 // Bump CACHE to force-refresh every device.
-const CACHE = 'cairn-v11';
+const CACHE = 'cairn-v12';
 const SHELL = [
   './', 'index.html', 'config.js', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',

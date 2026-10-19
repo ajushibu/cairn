@@ -414,3 +414,8 @@ body.in-reader .tabbar, body.in-reader #bookBar { display: none !important; }
 .stepper-row { display: flex; align-items: center; gap: 12px; }
 .stepper-row .btn { min-width: 64px; }
 .stepper-row b { min-width: 60px; text-align: center; font: 800 17px var(--round); font-variant-numeric: tabular-nums; }
+
+/* copy a highlighted passage */
+.lbl-row > .lbl { padding: 0 4px; font: 700 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.lbl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.copy-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; font-size: 15px; font-weight: 600; }

@@ -49,6 +49,21 @@
 
 <div class="bar" id="bookBar" hidden></div>
 
+<section class="reader" id="reader" aria-label="Reader" hidden>
+  <header class="rd-top">
+    <button type="button" class="link strong" data-act="rd-close">Done</button>
+    <div class="rd-title"><b id="rdBook"></b><span id="rdChap"></span></div>
+    <button type="button" class="rd-btn" data-act="rd-toc" aria-label="Contents">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>
+    </button>
+    <button type="button" class="rd-btn" data-act="rd-set" aria-label="Text and theme">
+      <svg width="24" height="22" viewBox="0 0 26 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 19L8 4l6 15M4.4 13.5h7.2"/><path d="M15.5 19l4-10 4 10M16.9 15.6h5.2"/></svg>
+    </button>
+  </header>
+  <div class="rd-stage"><div id="viewer"></div><p class="rd-msg" id="rdMsg" hidden></p></div>
+  <footer class="rd-bot" id="rdBot"></footer>
+</section>
+
 <dialog class="sheet" id="sheetMark" aria-labelledby="markH">
   <form id="markForm" class="sheet-in" novalidate>
     <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2 id="markH">Mark a page</h2><button type="submit" class="link strong">Add</button></div>
@@ -74,7 +89,11 @@
 
 <dialog class="sheet" id="sheetDetail" aria-label="Mark"><div class="sheet-in" id="detailBody"></div></dialog>
 <dialog class="sheet" id="sheetLink" aria-label="This is like that"><div class="sheet-in" id="linkBody"></div></dialog>
-<dialog class="sheet" id="sheetImport" aria-label="Import from Kindle"><div class="sheet-in" id="importBody"></div></dialog>
+<dialog class="sheet" id="sheetImport" aria-label="Import"><div class="sheet-in" id="importBody"></div></dialog>
+<dialog class="sheet" id="sheetToc" aria-label="Contents"><div class="sheet-in" id="tocBody"></div></dialog>
+<dialog class="sheet" id="sheetRset" aria-label="Text and theme"><div class="sheet-in" id="rsBody"></div></dialog>
+<dialog class="sheet" id="sheetRmark" aria-label="Mark this"><div class="sheet-in" id="rmBody"></div></dialog>
+<input type="file" id="epubInput" accept=".epub,application/epub+zip" hidden>
 <input type="file" id="photoInput" accept="image/*" multiple hidden>
 <input type="file" id="clipInput" accept=".txt,.html,.htm,text/plain,text/html" hidden>
 <dialog class="sheet" id="sheetMenu" aria-label="Cairn"><div class="sheet-in" id="menuBody"></div></dialog>
@@ -92,6 +111,8 @@
 
 <script src="/config.js"></script>
 <script src="vendor/supabase.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/epub.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* Cairn — a personal index for the books you read, on paper and on Kindle.
+/* Cairn — a personal index for the books you read: on paper, on Kindle, and EPUBs read right here.
  * Local-first: everything lives in localStorage and syncs to Supabase when you're signed in
  * (the same account as margin and recall). Claude runs on the server (/api/suggest, /api/ask,
  * /api/kindle, /api/draft); the key never reaches the browser.
@@ -56,6 +56,9 @@ const I = {
   import: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>',
   camera: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
   file: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>',
+  pen: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  fwd: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  book: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5.5C5.5 4 8.5 4 12 6c3.5-2 6.5-2 9-.5V19c-2.5-1.5-5.5-1.5-9 .5-3.5-2-6.5-2-9-.5z"/><path d="M12 6v13.5"/></svg>',
   cairn: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><ellipse cx="12" cy="19.6" rx="9" ry="3.2"/><ellipse cx="11.4" cy="13.8" rx="6.2" ry="2.8"/><ellipse cx="12.5" cy="8.6" rx="4.2" ry="2.4"/><ellipse cx="11.8" cy="4.2" rx="2.5" ry="1.8"/></svg>',
   cairnLg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><ellipse cx="12" cy="19.6" rx="9" ry="3.2"/><ellipse cx="11.4" cy="13.8" rx="6.2" ry="2.8"/><ellipse cx="12.5" cy="8.6" rx="4.2" ry="2.4"/><ellipse cx="11.8" cy="4.2" rx="2.5" ry="1.8"/></svg>'
 };
@@ -65,9 +68,11 @@ const I = {
 // `drafted` (this device only) remembers which inbox lines are still Claude's draft.
 const STORE_KEY = 'cairn.store.v1', CONFIG_KEY = 'cairn.config.v1';
 const EPOCH = '1970-01-01T00:00:00.000Z';
-const emptyStore = () => ({ books: {}, marks: {}, links: {}, lastSync: {}, owner: null, drafted: {} });
+// pendingFiles (this device only): EPUBs added here that still have to be uploaded to your account.
+const emptyStore = () => ({ books: {}, marks: {}, links: {}, lastSync: {}, owner: null, drafted: {}, pendingFiles: {} });
 let store = Object.assign(emptyStore(), loadJSON(STORE_KEY, {}));
 store.drafted = store.drafted || {};
+store.pendingFiles = store.pendingFiles || {};
 const CFG = window.CAIRN_CONFIG || {};
 // startOn: what opening the app shows ('shelf' or 'mark'). lastBookId: the book you last marked, picked first next time.
 let config = Object.assign({ theme: 'system', sort: 'page', startOn: 'shelf', lastBookId: null }, loadJSON(CONFIG_KEY, {}));
@@ -87,12 +92,14 @@ function changed() { persist(); scheduleSync(); derive(); }
 function addBook({ title, author = '', pages = null, color, kind = 'paper', example = false, created, touched }) {
   const t = nowISO();
   const b = { id: uid(), title, author, pages, color: color || nextColor(), kind, example, created_at: created || t, updated_at: t, touched_at: touched || t, deleted: false, _dirty: true };
+  if (kind === 'epub') Object.assign(b, { file_path: null, file_size: null, last_cfi: null, last_pct: null });
   store.books[b.id] = b; derive(); return b;
 }
-function addMark(bookId, { page = null, loc = null, text = '', quote = null, status = 'kept', source = null, created, due, n = 0 } = {}) {
+function addMark(bookId, { page = null, loc = null, text = '', quote = null, status = 'kept', source = null, cfi = null, chapter = null, created, due, n = 0 } = {}) {
   const t = Date.now();
   const m = { id: uid(), book_id: bookId, page, loc, text, quote, status, source, rev_n: n, rev_due: isoAt(due || t + DAY), rev_last: null,
     created_at: created ? isoAt(created) : isoAt(t), updated_at: nowISO(), deleted: false, _dirty: true };
+  if (cfi) Object.assign(m, { cfi, chapter });
   store.marks[m.id] = m; return m;
 }
 function addLink(a, b, because, example = false) {
@@ -108,15 +115,16 @@ function bump(bookId) { const b = store.books[bookId]; if (b) { b.touched_at = n
 let S = { books: [], links: [], inbox: [], examples: false };
 function derive() {
   const books = Object.values(store.books).filter((b) => !b.deleted).map((b) => ({
-    id: b.id, title: b.title, author: b.author || '', pages: b.pages || null, color: b.color, kind: b.kind === 'kindle' ? 'kindle' : 'paper', example: !!b.example,
-    created: ms(b.created_at), touched: ms(b.touched_at || b.updated_at), marks: []
+    id: b.id, title: b.title, author: b.author || '', pages: b.pages || null, color: b.color, kind: b.kind === 'kindle' || b.kind === 'epub' ? b.kind : 'paper', example: !!b.example,
+    created: ms(b.created_at), touched: ms(b.touched_at || b.updated_at), marks: [],
+    filePath: b.file_path || null, fileSize: b.file_size || null, lastCfi: b.last_cfi || null, lastPct: b.last_pct ?? null
   }));
   const byId = new Map(books.map((b) => [b.id, b]));
   const live = new Set(), inbox = [];
   for (const r of Object.values(store.marks)) {
     if (r.deleted) continue;
     const b = byId.get(r.book_id); if (!b) continue;
-    const m = { id: r.id, page: r.page ?? null, loc: r.loc ?? null, text: r.text || '', quote: r.quote || null, source: r.source || null,
+    const m = { id: r.id, page: r.page ?? null, loc: r.loc ?? null, text: r.text || '', quote: r.quote || null, source: r.source || null, cfi: r.cfi || null, chapter: r.chapter || null,
       at: ms(r.created_at), rev: { n: r.rev_n || 0, due: r.rev_due ? ms(r.rev_due) : ms(r.created_at) + DAY } };
     if (r.status === 'inbox') { inbox.push({ ...m, b }); continue; }
     live.add(r.id); b.marks.push(m);
@@ -137,8 +145,9 @@ function gist(t) { const s = String(t).split(/\s[—–-]\s|:\s/)[0]; const w = 
 const dueAt = (m) => m.rev.due;
 const dueList = () => { const now = Date.now(); return allMarks().filter(({ m }) => dueAt(m) <= now).sort((x, y) => dueAt(x.m) - dueAt(y.m)); };
 
-// Paper books are numbered by page; Kindle books by location (a page too, when the book has real page numbers).
-const useLoc = (b) => b.kind === 'kindle';
+// Paper books are numbered by page; Kindle books by location (a page too, when the book has real page numbers);
+// EPUBs read in Cairn by epub.js location.
+const useLoc = (b) => b.kind !== 'paper';
 const unitWord = (b, n = 2) => (useLoc(b) ? (n === 1 ? 'location' : 'locations') : (n === 1 ? 'page' : 'pages'));
 const pos = (b, m) => (useLoc(b) ? (m.loc ?? (m.page != null ? m.page * 15 : 0)) : (m.page ?? (m.loc != null ? m.loc / 15 : 0)));
 const reach = (b) => b.marks.reduce((n, m) => Math.max(n, useLoc(b) ? (m.loc ?? 0) : (m.page ?? 0)), 0);
@@ -209,8 +218,8 @@ const chunks = (a, n) => { const o = []; for (let i = 0; i < a.length; i += n) o
 const toRow = (r) => { const { _dirty, ...rest } = r; return { ...rest, user_id: user.id }; };
 
 async function probeSchema() {
-  const a = await sb.from('cairn_marks').select('loc,quote,status,source').limit(1);
-  const b = await sb.from('cairn_books').select('kind').limit(1);
+  const a = await sb.from('cairn_marks').select('loc,quote,status,source,cfi,chapter').limit(1);
+  const b = await sb.from('cairn_books').select('kind,file_path,file_size,last_cfi,last_pct').limit(1);
   schemaOk = !a.error && !b.error;
 }
 async function pushTable(table, map) {
@@ -261,6 +270,7 @@ async function syncNow() {
     persistNow(); derive();
     setSync('ok', 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     queueRender();
+    uploadPending();
   } catch (e) {
     console.error(e);
     setSync('err', 'Sync error');
@@ -333,24 +343,24 @@ function headHtml(title, extra = '') {
   return `<header class="h-head"><div class="h-title"><p class="eyebrow brand"><span class="logo">${I.cairn}</span>Cairn</p><h1>${title}</h1></div>${extra}</header>`;
 }
 const signinHint = () => (sb && !user ? `<div class="signin"><span>Sign in with your margin account to sync and use Claude.</span><button type="button" class="btn tinted" data-act="signin">Sign in</button></div>` : '');
-const inboxBanner = () => (S.inbox.length ? `<div class="banner"><span>${plural(S.inbox.length, 'Kindle highlight')} waiting for your line.</span><button type="button" class="link strong" data-act="go" data-to="inbox">Review</button></div>` : '');
+const inboxBanner = () => (S.inbox.length ? `<div class="banner"><span>${plural(S.inbox.length, 'highlight')} waiting for your line.</span><button type="button" class="link strong" data-act="go" data-to="inbox">Review</button></div>` : '');
 
 function viewShelf() {
   const books = shelfOrder();
-  const tools = `<button type="button" class="btn primary" data-act="book-new">${I.plus}Book</button><button type="button" class="round-btn" data-act="import" aria-label="Import from Kindle">${I.import}</button><button type="button" class="round-btn" data-act="menu" aria-label="Account, export and settings">${I.more}</button>`;
+  const tools = `<button type="button" class="btn primary" data-act="book-new">${I.plus}Book</button><button type="button" class="round-btn" data-act="import" aria-label="Import an EPUB or Kindle highlights">${I.import}</button><button type="button" class="round-btn" data-act="menu" aria-label="Account, export and settings">${I.more}</button>`;
   let h = headHtml('Shelf', tools);
   if (!books.length) {
     return h + signinHint() + `<section class="empty-card">
       <p class="eyebrow">Your shelf is empty</p>
       <h2>Index the book in your hands</h2>
-      <p>Add the book you’re reading. When a page matters, write its number and one line in your own words. Later, ask a question and Cairn points you to the book and the page.</p>
+      <p>Add the book you’re reading, or open an EPUB and read it here. When a page matters, write its number and one line in your own words. Later, ask a question and Cairn points you to the book and the page.</p>
       <ol class="steps"><li><span><b>Mark</b> a page: its number and one line.</span></li><li><span><b>Link</b> it when it’s like something in another book, and say why.</span></li><li><span><b>Ask</b> your shelf, and <b>revisit</b> pages before you forget them.</span></li></ol>
       <div class="specimen" aria-label="What an index line looks like">
         <p class="eyebrow" style="margin-bottom:2px">An index line</p>
         <div class="entry" style="cursor:default"><span class="e-text">Opportunity cost: the real price is the next-best option</span><span class="e-lead" aria-hidden="true"></span><span class="e-page">83</span></div>
         <div class="seealso"><span class="sa">see also</span><span class="ref">Kahneman 344</span><span class="gist">Sunk cost</span></div>
       </div>
-      <div class="row"><button type="button" class="btn primary" data-act="book-new">${I.plus}Add a book</button><button type="button" class="btn" data-act="import">${I.import}Import from Kindle</button><button type="button" class="btn" data-act="load-examples">Try an example shelf</button></div>
+      <div class="row"><button type="button" class="btn primary" data-act="book-new">${I.plus}Add a book</button><button type="button" class="btn" data-act="import" data-mode="epub">${I.book}Open an EPUB</button><button type="button" class="btn" data-act="import" data-mode="photos">${I.import}Kindle highlights</button><button type="button" class="btn" data-act="load-examples">Try an example shelf</button></div>
     </section>`;
   }
   h += signinHint() + inboxBanner();
@@ -362,8 +372,10 @@ function viewShelf() {
     <div class="stat${nDue ? ' d' : ''}"><p class="k">To revisit</p><p class="v">${nDue}</p></div></section>`;
   h += `<div class="grid">` + books.map((b) => {
     const n = b.marks.length, r = reach(b), waiting = S.inbox.filter((x) => x.b.id === b.id).length;
-    return `<button type="button" class="tile" style="${accStyle(b.color)}" data-act="open-book" data-id="${esc(b.id)}">
-      <span class="tile-top"><span class="chip">${plural(n, 'mark')}</span>${b.kind === 'kindle' ? `<span class="chip">Kindle${waiting ? ' · ' + waiting + ' new' : ''}</span>` : ''}</span>
+    const kindChip = b.kind === 'kindle' ? `<span class="chip">Kindle${waiting ? ' · ' + waiting + ' new' : ''}</span>`
+      : b.kind === 'epub' ? `<span class="chip">EPUB${b.lastPct ? ' · ' + Math.round(b.lastPct * 100) + '%' : ''}${waiting ? ' · ' + waiting + ' new' : ''}</span>` : '';
+    return `<button type="button" class="tile" style="${accStyle(b.color)}" data-act="${b.kind === 'epub' ? 'read' : 'open-book'}" data-id="${esc(b.id)}" data-book="${esc(b.id)}"${b.kind === 'epub' ? ` aria-label="Read ${esc(b.title)}"` : ''}>
+      <span class="tile-top"><span class="chip">${plural(n, 'mark')}</span>${kindChip}</span>
       <span><h3>${esc(b.title)}</h3>${b.author ? `<p class="tm">${esc(b.author)}</p>` : ''}${r ? `<span class="lead"><span>to ${useLoc(b) ? 'loc' : 'page'}</span><i aria-hidden="true"></i><span>${fmtN(r)}</span></span>` : ''}</span>
     </button>`;
   }).join('') + `</div>`;
@@ -387,10 +399,11 @@ function viewBook() {
     <div class="nav"><button type="button" class="link" data-act="go" data-to="shelf">${I.back}Shelf</button><button type="button" class="icon-btn" data-act="book-edit" data-id="${esc(b.id)}" aria-label="Edit book">${I.more}</button></div>
     ${marks.length > 1 ? `<div class="seg" role="group" aria-label="Order of the index" style="--n:2"><span class="thumb" aria-hidden="true" style="transform:translateX(${az ? '100%' : '0'})"></span><button type="button" aria-pressed="${!az}" data-act="sort" data-sort="page">By ${useLoc(b) ? 'location' : 'page'}</button><button type="button" aria-pressed="${az}" data-act="sort" data-sort="az">A–Z</button></div>` : ''}
   </div></div><div class="doc">
-    <div class="s-head"><p class="eyebrow">${b.kind === 'kindle' ? 'Kindle · ' : ''}Your index · ${plural(marks.length, 'mark')}${nLinks ? ' · ' + plural(nLinks, 'see-also') : ''}</p><h1>${esc(b.title)}</h1>${b.author ? `<p class="meta">${esc(b.author)}</p>` : ''}</div>`;
+    <div class="s-head"><p class="eyebrow">${b.kind === 'kindle' ? 'Kindle · ' : b.kind === 'epub' ? 'EPUB · ' : ''}Your index · ${plural(marks.length, 'mark')}${nLinks ? ' · ' + plural(nLinks, 'see-also') : ''}</p><h1>${esc(b.title)}</h1>${b.author ? `<p class="meta">${esc(b.author)}</p>` : ''}</div>`;
   if (waiting) h += `<div class="banner"><span>${plural(waiting, 'highlight')} from this book waiting for your line.</span><button type="button" class="link strong" data-act="go" data-to="inbox">Review</button></div>`;
   if (!marks.length) {
-    h += `<div class="empty-card"><h2>No marks yet</h2><p>When a ${unitWord(b, 1)} matters, tap Mark below and write one line in your own words.${b.kind === 'kindle' ? ' Or import your Kindle highlights.' : ''}</p>${b.kind === 'kindle' ? `<button type="button" class="btn" data-act="import" data-book="${esc(b.id)}">${I.import}Import from Kindle</button>` : ''}</div>`;
+    if (b.kind === 'epub') h += `<div class="empty-card"><h2>No marks yet</h2><p>Open the book and select a line you want to keep. Cairn saves the quote, you write your line, and it lands here with its location.</p><button type="button" class="btn primary" data-act="read" data-book="${esc(b.id)}">${I.book}Read</button></div>`;
+    else h += `<div class="empty-card"><h2>No marks yet</h2><p>When a ${unitWord(b, 1)} matters, tap Mark below and write one line in your own words.${b.kind === 'kindle' ? ' Or import your Kindle highlights.' : ''}</p>${b.kind === 'kindle' ? `<button type="button" class="btn" data-act="import" data-mode="photos" data-book="${esc(b.id)}">${I.import}Import from Kindle</button>` : ''}</div>`;
   } else {
     h += `<ul class="index">`;
     if (!az) { marks.sort((x, y) => pos(b, x) - pos(b, y) || x.at - y.at); h += marks.map((m) => entryHtml(b, m)).join(''); }
@@ -412,6 +425,10 @@ function viewBook() {
 
 function bookBarHtml(b) {
   const r = reach(b), n = b.marks.length;
+  if (b.kind === 'epub') {
+    const pct = b.lastPct != null ? Math.round(b.lastPct * 100) : null;
+    return `<span class="bar-ic">${pct != null ? ring(44, 5, b.lastPct) : `<span class="bar-ic tint">${I.book}</span>`}</span><span class="bar-t"><b>${pct != null ? (pct >= 99 ? 'Finished' : `${pct}% read`) : 'Not started'}</b><span>${plural(n, 'mark')}${r ? ` · indexed to loc ${fmtN(r)}` : ''}</span></span><button type="button" class="btn primary" data-act="read" data-book="${esc(b.id)}">${pct ? 'Continue' : 'Read'}</button>`;
+  }
   const lead = b.pages ? ring(44, 5, r / b.pages) : `<span class="bar-ic tint">${I.cairnLg}</span>`;
   const title = r ? `Indexed to ${reachLabel(b, fmtN(r))}` : 'Start your index';
   const sub = b.pages ? `${Math.round((r / b.pages) * 100)}% of ${fmtN(b.pages)} ${unitWord(b)}` : `${plural(n, 'mark')}${n ? '' : ' so far'}`;
@@ -442,7 +459,7 @@ function viewAskResults() {
     h += `<div class="found${anim}" data-acc style="--n:${r.walk.length};${accStyle(b.color)}"><p class="eyebrow">That ${byLoc ? 'location' : 'page'} · ${esc(b.title)}</p>
       <div class="pgline"><span class="p">${byLoc ? 'loc' : 'p.'}</span><span class="pg">${byLoc ? fmtN(m.loc) : m.page}</span></div>
       <p class="found-text">${esc(m.text)}</p>${m.quote ? `<p class="quote clamp">${esc(m.quote)}</p>` : ''}
-      <div class="row"><button type="button" class="btn primary" data-act="goto-mark" data-id="${esc(m.id)}">Open in index</button></div></div>`;
+      <div class="row"><button type="button" class="btn primary" data-act="goto-mark" data-id="${esc(m.id)}">Open in index</button>${m.cfi ? `<button type="button" class="btn" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Open in book</button>` : ''}</div></div>`;
     const trail = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
     if (trail.length) h += `<p class="sec-h">Your see-also trail</p><ul class="group">` + trail.map(({ l, o }) => `<li class="g-stack"><span class="top"><button type="button" class="ref" data-act="goto-mark" data-id="${esc(o.m.id)}">${esc(shortRef(o.b))} ${refNum(o.m)}</button><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p></li>`).join('') + `</ul>`;
     const others = r.others.map(findMark).filter(Boolean);
@@ -494,7 +511,7 @@ function viewRevisit() {
     <p class="rv-src">${esc(b.title)}${due.length ? ' · ' + due.length + ' left' : ''}</p>
     <h2 class="rv-q">What did you mark ${m.page != null ? 'on' : 'at'} <em>${whereLong(m)}</em>?</h2>`;
   if (!V.rv.shown) {
-    h += `<button type="button" class="btn tinted lg block" data-act="rv-show">Show my note</button><p class="help">Not sure? Open the book to ${whereLong(m)} first.</p>`;
+    h += `<button type="button" class="btn tinted lg block" data-act="rv-show">Show my note</button>${m.cfi ? `<button type="button" class="btn lg block" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Not sure? Open the book there</button>` : `<p class="help">Not sure? Open the book to ${whereLong(m)} first.</p>`}`;
   } else {
     const see = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
     h += `<p class="rv-ans">${esc(m.text)}</p>`;
@@ -507,7 +524,7 @@ function viewRevisit() {
 
 /* inbox: imported highlights waiting for your line */
 function viewInbox() {
-  let h = `<header class="h-head"><div class="h-title"><button type="button" class="link" data-act="go" data-to="shelf" style="margin-left:-6px">${I.back}Shelf</button><h1>Inbox</h1></div><button type="button" class="round-btn" data-act="import" aria-label="Import more from Kindle">${I.import}</button></header>`;
+  let h = `<header class="h-head"><div class="h-title"><button type="button" class="link" data-act="go" data-to="shelf" style="margin-left:-6px">${I.back}Shelf</button><h1>Inbox</h1></div><button type="button" class="round-btn" data-act="import" data-mode="file" aria-label="Import more highlights">${I.import}</button></header>`;
   const items = S.inbox;
   if (!items.length) return h + `<section class="empty-card"><h2>Nothing waiting</h2><p>Kindle highlights you import land here. Each one waits until you give it a line in your own words, then moves into the book’s index.</p><button type="button" class="btn primary" data-act="import">${I.import}Import from Kindle</button></section>`;
   h += `<p class="intro">Each highlight needs one line in your words before it joins your index. Keep it, edit it, or skip it.</p>`;
@@ -526,7 +543,7 @@ function viewInbox() {
     }
     const drafted = store.drafted[it.id] && it.text.trim();
     h += `<article class="ib" id="ib-${esc(it.id)}">
-      <p class="ib-where">${whereBoth(it) || 'No position'}</p>
+      <p class="ib-where">${[it.chapter, whereBoth(it)].filter(Boolean).map(esc).join(' · ') || 'No position'}</p>
       ${it.quote ? `<p class="quote">${esc(it.quote)}</p>` : ''}
       <label class="lbl" for="ibt-${esc(it.id)}">Your line</label>
       <textarea class="tx" id="ibt-${esc(it.id)}" data-ib="${esc(it.id)}" rows="2" maxlength="280" placeholder="This passage says… in your own words">${esc(it.text)}</textarea>
@@ -544,6 +561,7 @@ function viewInbox() {
 const IDEAS = [
   { when: 'Every reading session', items: [
     { t: 'One page, one line', d: 'End each sitting by marking the one page you’d want to find again. One good line beats five copied sentences.', a: ['mark-new', 'Mark a page'] },
+    { t: 'Read EPUBs in Cairn', d: 'Open a DRM-free EPUB and read it here. Select a line when it matters and write your line on the spot, or tap Later and do it when you stop reading.', a: ['import:epub', 'Open an EPUB'] },
     { t: 'Phone beside the book', d: 'In ⋯, set Open Cairn on to Mark a page. Opening the app then goes straight to the mark sheet with your book picked and your last page or location filled in. Change the last digits, write one line, done.', a: ['menu', 'Open settings'] },
     { t: 'Mark the claim, not the fact', d: 'Write what the page argues or why it matters (“rent control shrinks supply”), not a date or a name. Claims are what you’ll search for later.' },
     { t: 'Mark disagreements too', d: 'When you think the author is wrong, mark it and say why. Your objections belong in your index as much as your agreements.' }
@@ -551,7 +569,7 @@ const IDEAS = [
   { when: 'Every week', items: [
     { t: 'The Sunday walk', d: 'Ten minutes: clear Revisit, then make one new link between two books. Most connections show up on the second look, not the first.', a: ['go:revisit', 'Open Revisit'] },
     { t: 'Empty the inbox', d: 'Turn the week’s Kindle highlights into lines. If you can’t explain a highlight in your own words, skip it: it wasn’t yours yet.', a: ['go:inbox', 'Open inbox'] },
-    { t: 'Import from your Kindle', d: 'Plug the Kindle into your computer and import My Clippings.txt. Cairn only adds highlights it hasn’t seen, so importing the same file again is safe.', a: ['import', 'Import from Kindle'] }
+    { t: 'Import from your Kindle', d: 'Plug the Kindle into your computer and import My Clippings.txt. Cairn only adds highlights it hasn’t seen, so importing the same file again is safe.', a: ['import:file', 'Import from Kindle'] }
   ] },
   { when: 'When you finish a book', items: [
     { t: 'Read your own index', d: 'Read the book’s index top to bottom. If a line no longer makes sense, reopen the page and rewrite it.' },
@@ -582,15 +600,17 @@ function actionButton(a, tint = true) {
   if (!a) return '';
   const [act, label] = a;
   const [name, to] = act.split(':');
-  return `<button type="button" class="btn${tint ? ' tinted' : ''}" data-act="${name}"${to ? ` data-to="${to}"` : ''}>${esc(label)}</button>`;
+  return `<button type="button" class="btn${tint ? ' tinted' : ''}" data-act="${name}"${to ? (name === 'import' ? ` data-mode="${to}"` : ` data-to="${to}"`) : ''}>${esc(label)}</button>`;
 }
 function nudges() {
   const out = [], now = Date.now(), marks = allMarks();
   if (!S.books.length) {
-    out.push({ k: 'Start', t: 'Add the book you’re reading', d: 'Paper or Kindle. Mark a page the next time something matters.', btn: `<button type="button" class="btn tinted" data-act="book-new">Add a book</button>` });
+    out.push({ k: 'Start', t: 'Add the book you’re reading', d: 'Paper, Kindle, or an EPUB you read here. Mark a page the next time something matters.', btn: `<button type="button" class="btn tinted" data-act="book-new">Add a book</button>` });
     return out;
   }
-  if (S.inbox.length) out.push({ k: 'Inbox', t: `${plural(S.inbox.length, 'Kindle highlight')} waiting`, d: 'Give each one a line in your own words, or skip it.', btn: actionButton(['go:inbox', 'Review']) });
+  const reading = S.books.filter((b) => b.kind === 'epub' && b.lastPct > 0.01 && b.lastPct < 0.98).sort((a, b) => b.touched - a.touched)[0];
+  if (reading) out.push({ k: 'Keep reading', t: `${reading.title}, ${Math.round(reading.lastPct * 100)}% in`, d: 'Pick up where you left off. Select a line when something matters.', btn: `<button type="button" class="btn tinted" data-act="read" data-book="${esc(reading.id)}">Continue</button>` });
+  if (S.inbox.length) out.push({ k: 'Inbox', t: `${plural(S.inbox.length, 'highlight')} waiting`, d: 'Give each one a line in your own words, or skip it.', btn: actionButton(['go:inbox', 'Review']) });
   const due = dueList().length;
   if (due) out.push({ k: 'Revisit', t: `${plural(due, 'page')} to recall today`, d: 'A few seconds each. Recall first, then look.', btn: actionButton(['go:revisit', 'Start']) });
   const last = marks.reduce((t, x) => Math.max(t, x.m.at), 0);
@@ -649,6 +669,7 @@ function render() {
   }
   const n = dueList().length, badge = $('#rvBadge');
   badge.textContent = n > 9 ? '9+' : String(n); badge.hidden = !n;
+  if (R.open) paintHighlights();
   if (V.flash) {
     const el = document.getElementById('m-' + V.flash);
     if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' }));
@@ -715,8 +736,8 @@ function focusSpot() {
 function renderMarkUnit() {
   const sel = $('input[name="markBook"]:checked');
   const b = sel && S.books.find((x) => x.id === sel.value);
-  const kindle = b && useLoc(b);
-  if (!kindle) MK.unit = 'page';
+  const kindle = b && b.kind === 'kindle';
+  if (!kindle) MK.unit = b && useLoc(b) ? 'loc' : 'page';
   $('#markUnit').innerHTML = kindle ? miniSeg('mark-unit', MK.unit, [['loc', 'Location'], ['page', 'Page']]) : '';
   $('#markPageLbl').textContent = MK.unit === 'loc' ? 'Location' : 'Page';
   prefillSpot();
@@ -746,7 +767,7 @@ function submitMark(e) {
 let BK = null;
 function openBook(id, preset = {}) {
   const b = id ? store.books[id] : null;
-  BK = { id: b ? b.id : null, kind: b ? (b.kind === 'kindle' ? 'kindle' : 'paper') : (preset.kind || 'paper') };
+  BK = { id: b ? b.id : null, kind: b ? (b.kind === 'kindle' || b.kind === 'epub' ? b.kind : 'paper') : (preset.kind || 'paper') };
   $('#bookH').textContent = b ? 'Edit book' : 'New book';
   $('#bookSave').textContent = b ? 'Save' : 'Add';
   $('#bTitle').value = b ? b.title : (preset.title || ''); $('#bAuthor').value = b ? (b.author || '') : (preset.author || ''); $('#bPages').value = b && b.pages ? b.pages : '';
@@ -759,21 +780,23 @@ function openBook(id, preset = {}) {
   if (!b) setTimeout(() => $('#bTitle').focus(), 60);
 }
 function renderBookKind() {
-  $('#bKind').innerHTML = miniSeg('book-kind', BK.kind, [['paper', 'Paper'], ['kindle', 'Kindle']]);
+  const epub = BK.kind === 'epub';
+  $('#bPages').closest('.field').hidden = epub;
+  $('#bKind').innerHTML = epub ? '<p class="help" style="margin:0">EPUB, read in Cairn. Locations are counted from the file.</p>' : miniSeg('book-kind', BK.kind, [['paper', 'Paper'], ['kindle', 'Kindle']]);
   $('#bPagesLbl').textContent = BK.kind === 'kindle' ? 'Total locations (optional)' : 'Total pages (optional)';
 }
 function submitBook(e) {
   e.preventDefault();
   const title = $('#bTitle').value.trim().replace(/\s+/g, ' ');
   const author = $('#bAuthor').value.trim().replace(/\s+/g, ' ');
-  const pages = intOrNull($('#bPages').value);
+  const pages = BK && BK.kind === 'epub' && BK.id ? (store.books[BK.id].pages || null) : intOrNull($('#bPages').value);
   const color = ($('input[name="bColor"]:checked') || {}).value || 'moss';
   if (!title) { $('#bookErr').textContent = 'Give the book a title.'; $('#bTitle').focus(); return; }
   if (BK && BK.id) {
     const rec = store.books[BK.id];
     const vb = S.books.find((x) => x.id === BK.id);
     const r = vb ? (BK.kind === 'kindle' ? vb.marks.reduce((n, m) => Math.max(n, m.loc ?? 0), 0) : vb.marks.reduce((n, m) => Math.max(n, m.page ?? 0), 0)) : 0;
-    if (pages && r > pages) { $('#bookErr').textContent = `You have marks past ${BK.kind === 'kindle' ? 'location' : 'page'} ${fmtN(pages)}. Check the total.`; return; }
+    if (BK.kind !== 'epub' && pages && r > pages) { $('#bookErr').textContent = `You have marks past ${BK.kind === 'kindle' ? 'location' : 'page'} ${fmtN(pages)}. Check the total.`; return; }
     Object.assign(rec, { title, author, pages, color, kind: BK.kind }); touch(rec);
     changed(); closeSheets(); render(); toast('Book updated');
   } else {
@@ -791,6 +814,7 @@ function deleteBook() {
   ids.forEach((id) => { store.marks[id].deleted = true; touch(store.marks[id]); });
   Object.values(store.links).forEach((l) => { if (!l.deleted && (ids.has(l.a) || ids.has(l.b))) { l.deleted = true; touch(l); } });
   if (config.lastBookId === rec.id) { config.lastBookId = null; saveConfig(); }
+  if (rec.kind === 'epub') { if (R.open && R.bookId === rec.id) closeReader(true); forgetFile(rec); }
   changed(); closeSheets(); V.name = 'shelf'; render(); toast(`Deleted ${rec.title}`);
 }
 
@@ -804,16 +828,16 @@ function renderDetail() {
   const ls = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
   const body = $('#detailBody');
   setAcc(body, b.color);
-  const both = useLoc(b) || m.loc != null;
+  const both = useLoc(b) || m.loc != null, epub = b.kind === 'epub';
   const pageField = `<div class="field"><label class="lbl" for="dPage">Page</label><input id="dPage" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${m.page ?? ''}"></div>`;
   const locField = `<div class="field"><label class="lbl" for="dLoc">Location</label><input id="dLoc" class="input page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="${m.loc ?? ''}"></div>`;
   body.innerHTML = `
     <div class="sheet-head"><button type="button" class="link" data-act="close">Close</button><h2>${useLoc(b) && m.loc != null ? 'Location ' + fmtN(m.loc) : m.page != null ? 'Page ' + m.page : 'Mark'}</h2><button type="submit" form="detailForm" class="link strong">Save</button></div>
     <p class="eyebrow" style="color:var(--acc)">${esc(b.title)} · revisit ${relDays(dueAt(m))}</p>
     <form id="detailForm" class="sheet-in" style="padding:0" novalidate>
-      ${both ? `<div class="two">${locField}${pageField}</div>` : pageField}
+      ${epub ? `<p class="help" style="margin:0">${esc([m.chapter, m.loc ? 'location ' + fmtN(m.loc) : ''].filter(Boolean).join(' · ') || 'In the book')}</p>${m.cfi ? `<button type="button" class="btn block" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Open in book</button>` : ''}` : both ? `<div class="two">${locField}${pageField}</div>` : pageField}
       <div class="field"><label class="lbl" for="dText">Your line</label><textarea id="dText" class="tx" rows="3" maxlength="280">${esc(m.text)}</textarea></div>
-      ${m.quote ? `<div class="field"><span class="lbl">Highlighted on Kindle</span><p class="quote">${esc(m.quote)}</p></div>` : ''}
+      ${m.quote ? `<div class="field"><span class="lbl">${epub ? 'Highlighted' : 'Highlighted on Kindle'}</span><p class="quote">${esc(m.quote)}</p></div>` : ''}
       <p class="err-msg" id="dErr" role="alert"></p>
     </form>
     <div class="field"><span class="lbl">See also</span>
@@ -825,6 +849,12 @@ function renderDetail() {
 function submitDetail(e) {
   e.preventDefault();
   const f = findMark(DT.id); if (!f) return;
+  if (f.b.kind === 'epub' && !$('#dPage')) {
+    const text = $('#dText').value.trim().replace(/\s+/g, ' ');
+    if (!text) { $('#dErr').textContent = 'The line can’t be empty.'; return; }
+    const rec = store.marks[DT.id]; rec.text = text; touch(rec); bump(rec.book_id);
+    changed(); closeSheets(); render(); toast('Mark updated'); return;
+  }
   const page = intOrNull($('#dPage') && $('#dPage').value);
   const loc = $('#dLoc') ? intOrNull($('#dLoc').value) : f.m.loc;
   const text = $('#dText').value.trim().replace(/\s+/g, ' ');
@@ -840,7 +870,7 @@ function deleteMark() {
   const rec = store.marks[DT.id]; if (!rec) return;
   rec.deleted = true; touch(rec);
   Object.values(store.links).forEach((l) => { if (!l.deleted && (l.a === rec.id || l.b === rec.id)) { l.deleted = true; touch(l); } });
-  changed(); closeSheets(); render(); toast('Mark deleted');
+  changed(); closeSheets(); render(); toast('Mark deleted');   // render() also clears its highlight if the reader is open
 }
 
 /* link: "this is like that" */
@@ -952,20 +982,28 @@ function grade(ok) {
   toast(ok ? `Next look in ${plural(days, 'day')}` : 'You’ll see it again tomorrow');
 }
 
-/* ───────────── Kindle import ───────────── */
-// Two ways in: photos of the e-reader screen (Claude reads the highlights) or the clippings file (parsed here, no AI).
+/* ───────────── import: EPUB files and Kindle highlights ───────────── */
+// An EPUB opens in Cairn's reader. Kindle highlights come two ways: photos of the e-reader screen
+// (Claude reads them) or the clippings file (parsed here, no AI).
 let IM = null;
-function openImport(bookId) {
+function openImport(bookId, mode) {
   const kindleBooks = S.books.filter((b) => b.kind === 'kindle');
-  IM = { mode: 'photos', bookId: bookId || (kindleBooks[0] && kindleBooks[0].id) || 'new', title: '', author: '', files: [], busy: false, done: 0, total: 0, err: '', parsed: null, pick: new Set() };
+  const forKindle = bookId && (S.books.find((b) => b.id === bookId) || {}).kind === 'kindle';
+  IM = { mode: mode || (forKindle ? 'photos' : 'epub'), bookId: bookId || (kindleBooks[0] && kindleBooks[0].id) || 'new', title: '', author: '', files: [], busy: false, done: 0, total: 0, err: '', parsed: null, pick: new Set() };
   renderImport(); openSheet('sheetImport');
 }
 function renderImport() {
   const body = $('#importBody');
   setAcc(body, 'moss');
-  let h = `<div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2>Import from Kindle</h2><span></span></div>
-    <div class="seg" role="group" aria-label="How to import" style="--n:2"><span class="thumb" aria-hidden="true" style="transform:translateX(${IM.mode === 'file' ? '100%' : '0'})"></span><button type="button" aria-pressed="${IM.mode === 'photos'}" data-act="im-mode" data-v="photos">Photos of pages</button><button type="button" aria-pressed="${IM.mode === 'file'}" data-act="im-mode" data-v="file">Clippings file</button></div>`;
-  if (IM.mode === 'photos') {
+  const modes = [['epub', 'EPUB book'], ['photos', 'Kindle photos'], ['file', 'Clippings']], mi = modes.findIndex(([k]) => k === IM.mode);
+  let h = `<div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2>Import</h2><span></span></div>
+    <div class="seg" role="group" aria-label="What to import" style="--n:3"><span class="thumb" aria-hidden="true" style="transform:translateX(${mi * 100}%)"></span>${modes.map(([k, l]) => `<button type="button" aria-pressed="${IM.mode === k}" data-act="im-mode" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if (IM.mode === 'epub') {
+    h += `<label class="drop" for="epubInput"><span class="ic">${I.book}</span><span><b>${IM.busy ? 'Opening…' : 'Choose an EPUB'}</b><small>A .epub file from this device</small></span></label>
+      <p class="help">Cairn opens it in its reader. Select a line to mark it: Cairn keeps the quote and its location, and you write your line now or later. ${sb && user ? 'The file is saved privately to your account, so it opens on your other devices too.' : sb ? 'Sign in and the file is saved privately to your account, so it opens on your other devices too.' : 'The file stays on this device.'}</p>
+      <p class="help"><b>DRM-free books only.</b> Books bought in the Kindle, Apple Books or Google Play stores are usually locked. Standard Ebooks, Project Gutenberg, Humble Bundle and many indie publishers sell or give away DRM-free EPUBs.</p>`;
+    if (IM.err) h += `<p class="err-msg">${esc(IM.err)}</p>`;
+  } else if (IM.mode === 'photos') {
     const order = [...S.books].sort((a, b) => (b.kind === 'kindle') - (a.kind === 'kindle') || b.touched - a.touched);
     h += `<fieldset class="field"><legend>Which book?</legend><div class="chips">${order.map((b) => `<label class="bk"><input type="radio" name="imBook" value="${esc(b.id)}"${IM.bookId === b.id ? ' checked' : ''}><span class="d" style="${dotStyle(b.color)}" aria-hidden="true"></span><span>${esc(b.title)}</span></label>`).join('')}<label class="bk"><input type="radio" name="imBook" value="new"${IM.bookId === 'new' ? ' checked' : ''}><span>${I.plus}</span><span>New book</span></label></div></fieldset>`;
     if (IM.bookId === 'new') h += `<div class="two"><div class="field"><label class="lbl" for="imTitle">Title</label><input id="imTitle" class="input" autocomplete="off" value="${esc(IM.title)}"></div><div class="field"><label class="lbl" for="imAuthor">Author</label><input id="imAuthor" class="input" autocomplete="off" value="${esc(IM.author)}"></div></div>`;
@@ -1232,7 +1270,8 @@ function renderMenu() {
     <ul class="group" style="box-shadow:none;background:var(--fill)">${account}</ul>
     <ul class="group" style="box-shadow:none;background:var(--fill)">
       <li><button type="button" class="g-row acc" data-act="book-new">Add a book</button></li>
-      <li><button type="button" class="g-row acc" data-act="import">Import from Kindle</button></li>
+      <li><button type="button" class="g-row acc" data-act="import" data-mode="epub">Open an EPUB</button></li>
+      <li><button type="button" class="g-row acc" data-act="import" data-mode="file">Import Kindle highlights</button></li>
       ${S.inbox.length ? `<li><button type="button" class="g-row acc" data-act="go" data-to="inbox">Inbox<span class="val">${S.inbox.length}</span></button></li>` : ''}
       ${allMarks().length ? `<li><button type="button" class="g-row acc" data-act="export-md">Export index as Markdown</button></li>` : ''}
       <li><button type="button" class="g-row acc" data-act="export-json">Export backup</button></li>
@@ -1254,9 +1293,9 @@ function download(name, data, type) {
 function exportMd() {
   let md = `# My Cairn index\n\nExported ${new Date().toLocaleDateString()}\n`;
   for (const b of shelfOrder()) {
-    md += `\n## ${b.title}${b.author ? ' — ' + b.author : ''}${b.kind === 'kindle' ? ' (Kindle)' : ''}\n\n`;
+    md += `\n## ${b.title}${b.author ? ' — ' + b.author : ''}${b.kind === 'kindle' ? ' (Kindle)' : b.kind === 'epub' ? ' (EPUB)' : ''}\n\n`;
     for (const m of [...b.marks].sort((x, y) => pos(b, x) - pos(b, y))) {
-      md += `- ${whereBoth(m)} · ${m.text}\n`;
+      md += `- ${[m.chapter, whereBoth(m)].filter(Boolean).join(' · ')} · ${m.text}\n`;
       if (m.quote) md += `  > ${m.quote}\n`;
       for (const { l, other } of linksOf(m.id)) { const o = findMark(other); if (o) md += `  - see also: ${o.b.title}, ${whereShort(o.m)} (because: ${l.because})\n`; }
     }
@@ -1285,6 +1324,420 @@ async function submitAuth(e) {
   else { closeSheets(); toast('Signed in. Syncing your shelf.'); }
 }
 
+/* ───────────── EPUB files: this device (IndexedDB) and your account (Supabase Storage) ───────────── */
+// Each book's file is kept on the device that opened it, and uploaded once to a private bucket
+// (<user id>/<book id>.epub) so any signed-in device can download it the first time it opens the book.
+const BUCKET = 'cairn-books';
+const MAX_FILE = 50 * 1024 * 1024;   // the largest single file Supabase's free plan accepts
+const IDB = (() => {
+  let p = null;
+  const open = () => p || (p = new Promise((res, rej) => {
+    const r = indexedDB.open('cairn-files', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('files'); r.result.createObjectStore('locs'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const run = async (name, mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(name, mode); const req = fn(tx.objectStore(name));
+      tx.oncomplete = () => res(req ? req.result : undefined); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+    });
+  };
+  return {
+    get: (name, key) => run(name, 'readonly', (s) => s.get(key)).catch(() => undefined),
+    put: (name, key, val) => run(name, 'readwrite', (s) => s.put(val, key)),
+    del: (name, key) => run(name, 'readwrite', (s) => s.delete(key)).catch(() => {}),
+    keys: (name) => run(name, 'readonly', (s) => s.getAllKeys()).catch(() => [])
+  };
+})();
+const fmtMB = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+let uploading = false;
+async function uploadPending() {
+  if (!sb || !user || uploading || !schemaOk) return;
+  const ids = Object.keys(store.pendingFiles).filter((id) => store.books[id] && !store.books[id].deleted);
+  if (!ids.length) return;
+  uploading = true;
+  try {
+    for (const id of ids) {
+      const blob = await IDB.get('files', id);
+      if (!blob) { delete store.pendingFiles[id]; continue; }
+      const path = `${user.id}/${id}.epub`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, blob, { upsert: true, contentType: 'application/epub+zip' });
+      if (error) {
+        const msg = String(error.message || error);
+        toast(/bucket/i.test(msg) ? 'Book storage isn’t set up in Supabase yet. Run supabase/schema.sql again; the book stays on this device until then.' : `Couldn’t upload ${store.books[id].title}: ${msg}`, 8000);
+        break;
+      }
+      const rec = store.books[id];
+      Object.assign(rec, { file_path: path, file_size: blob.size }); touch(rec);
+      delete store.pendingFiles[id];
+      changed();
+      toast(`${rec.title} is saved to your account, so it opens on your other devices too.`);
+    }
+  } finally { uploading = false; persist(); }
+}
+async function getBookFile(b, say) {
+  const local = await IDB.get('files', b.id);
+  if (local) return local;
+  if (!b.filePath) throw new Error('This book’s file hasn’t reached your account yet. Open Cairn on the device you added it from while signed in, then try again.');
+  if (!sb || !user) throw new Error('Sign in to download this book to this device.');
+  say(`Downloading ${b.fileSize ? fmtMB(b.fileSize) : 'the book'}…`);
+  const { data, error } = await sb.storage.from(BUCKET).download(b.filePath);
+  if (error || !data) throw new Error('Couldn’t download the book. Check your connection and try again.');
+  await IDB.put('files', b.id, data).catch(() => {});
+  return data;
+}
+function forgetFile(rec) {
+  IDB.del('files', rec.id); IDB.del('locs', rec.id);
+  delete store.pendingFiles[rec.id];
+  if (rec.file_path && sb && user) sb.storage.from(BUCKET).remove([rec.file_path]).catch(() => {});
+}
+// DRM-locked EPUBs encrypt their text. Font obfuscation (also listed in encryption.xml) is fine.
+async function isLocked(buf) {
+  try {
+    const zip = await window.JSZip.loadAsync(buf);
+    if (zip.file('META-INF/rights.xml')) return true;
+    const enc = zip.file('META-INF/encryption.xml'); if (!enc) return false;
+    const xml = await enc.async('string');
+    return [...xml.matchAll(/Algorithm="([^"]+)"/g)].map((m) => m[1]).some((a) => !/idpf\.org\/2008\/embedding|ns\.adobe\.com\/pdf\/enc#RC/.test(a));
+  } catch { return false; }
+}
+async function importEpub(file) {
+  if (!window.ePub || !window.JSZip) { IM.err = 'The reader didn’t load. Check your connection and reload Cairn.'; renderImport(); return; }
+  if (!/\.epub$/i.test(file.name) && file.type !== 'application/epub+zip') { IM.err = 'That isn’t an EPUB. Choose a file whose name ends in .epub.'; renderImport(); return; }
+  IM.busy = true; IM.err = ''; renderImport();
+  const fail = (msg) => { IM.busy = false; IM.err = msg; renderImport(); };
+  let buf, meta;
+  try {
+    buf = await file.arrayBuffer();
+    if (await isLocked(buf)) return fail('This book is locked (DRM), so only the store’s own app can open it. Cairn opens DRM-free EPUBs, such as those from Standard Ebooks, Project Gutenberg or Humble Bundle.');
+    const bk = window.ePub(buf);
+    meta = await bk.loaded.metadata;   // left for the garbage collector: destroying it mid-load throws inside epub.js
+  } catch (e) { console.error(e); return fail('This file couldn’t be opened as an EPUB. It may be damaged.'); }
+  const title = String(meta.title || file.name.replace(/\.epub$/i, '')).replace(/\s+/g, ' ').trim().slice(0, 140) || 'Untitled';
+  const author = String(meta.creator || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  const same = S.books.find((b) => b.kind === 'epub' && titleKey(b.title) === titleKey(title));
+  const rec = same ? store.books[same.id] : addBook({ title, author, kind: 'epub' });
+  if (same) { rec.file_size = file.size; touch(rec); IDB.del('locs', rec.id); }
+  try { await IDB.put('files', rec.id, new Blob([buf], { type: 'application/epub+zip' })); }
+  catch { if (!same) { rec.deleted = true; touch(rec); changed(); } return fail('This device is out of storage space for books. Free some space and try again.'); }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch { /* best effort */ }
+  if (file.size > MAX_FILE) toast(`This book is ${fmtMB(file.size)}, over the 50 MB the free Supabase plan accepts, so it stays on this device only.`, 8000);
+  else store.pendingFiles[rec.id] = true;
+  bump(rec.id); config.lastBookId = rec.id; saveConfig();
+  changed();
+  IM.busy = false; closeSheets();
+  V.name = 'book'; V.bookId = rec.id; render();
+  if (same) toast(`Replaced the file for ${title}. Your marks are kept.`);
+  if (sb && user) uploadPending(); else if (sb && file.size <= MAX_FILE) toast('Sign in to keep this book in your account and read it on your other devices.', 7000);
+  openReader(rec.id);
+}
+
+/* ───────────── reader ───────────── */
+// epub.js renders the book in a sandboxed iframe (no scripts). Positions are EPUB CFIs; "loc" numbers are
+// epub.js locations of about 1,000 characters, counted once per book and kept on this device.
+const RD_THEMES = {
+  light: { body: { color: '#1C1C1E', background: '#FFFFFF' }, '::selection': { background: 'rgba(43, 117, 86, .28)' } },
+  sepia: { body: { color: '#3B2F23', background: '#F6EFE2' }, '::selection': { background: 'rgba(184, 80, 26, .22)' } },
+  dark: { body: { color: '#E5E5EA', background: '#121212' }, a: { color: '#6ED0A4' }, '::selection': { background: 'rgba(110, 208, 164, .32)' } }
+};
+const RD_FONTS = { serif: 'ui-serif, "New York", "Iowan Old Style", Georgia, serif', sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif' };
+const R = { open: false, gen: 0, bookId: null, book: null, rend: null, sel: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false, saveT: null };
+const rdCfg = () => (config.reader = Object.assign({ size: 100, theme: 'auto', font: 'serif' }, config.reader || {}));
+function rdTheme() {
+  const t = rdCfg().theme;
+  if (t !== 'auto') return t;
+  const forced = document.documentElement.dataset.theme;
+  return forced ? forced : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function rdMsg(text, err) { const el = $('#rdMsg'); el.textContent = text || ''; el.hidden = !text; el.classList.toggle('err', !!err); }
+
+async function openReader(bookId, target) {
+  const b = S.books.find((x) => x.id === bookId); if (!b) return;
+  if (!window.ePub) { toast('The reader didn’t load. Check your connection and reload Cairn.'); return; }
+  if (R.open) closeReader(true);
+  closeSheets();
+  const gen = ++R.gen;
+  Object.assign(R, { open: true, bookId, sel: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false });
+  const el = $('#reader'); setAcc(el, b.color); el.dataset.rt = rdTheme(); el.hidden = false;
+  document.body.classList.add('in-reader');
+  $('#rdBook').textContent = b.title; $('#rdChap').textContent = b.author || '';
+  rdBot(); rdMsg('Opening…');
+  let file;
+  try { file = await getBookFile(b, rdMsg); } catch (e) { if (gen === R.gen) rdMsg(e.message, true); return; }
+  if (gen !== R.gen) return;
+  try {
+    const book = window.ePub(await file.arrayBuffer());
+    const viewer = $('#viewer'); viewer.innerHTML = '';
+    const rend = book.renderTo(viewer, { width: '100%', height: '100%', flow: 'paginated', spread: 'auto', minSpreadWidth: 900, allowScriptedContent: false });
+    R.book = book; R.rend = rend;
+    Object.entries(RD_THEMES).forEach(([k, v]) => rend.themes.register(k, v));
+    applyReaderPrefs();
+    rend.on('relocated', onRelocated);
+    rend.on('selected', onSelected);
+    rend.on('click', onReaderClick);
+    rend.on('keyup', rdKey);
+    rend.hooks.content.register(onContent);
+    const start = target || b.lastCfi || undefined;
+    try { await rend.display(start); } catch { await rend.display(); }
+    if (gen !== R.gen) return;
+    rdMsg('');
+    book.loaded.navigation.then((nav) => { if (gen === R.gen) buildToc(nav.toc || []); }).catch(() => {});
+    paintHighlights();
+    loadLocations(b, gen);
+  } catch (e) {
+    console.error(e);
+    if (gen === R.gen) rdMsg('This book couldn’t be opened. The file may be damaged.', true);
+  }
+}
+function closeReader(stay) {
+  if (!R.open) return;
+  clearTimeout(R.saveT); savePosition();
+  // Only the rendition is torn down: destroying the book mid-load (contents, locations) throws inside epub.js.
+  try { R.rend && R.rend.destroy(); } catch { /* already gone */ }
+  Object.assign(R, { open: false, book: null, rend: null, sel: null, hl: new Map() });
+  R.gen++;
+  $('#viewer').innerHTML = ''; rdMsg('');
+  $('#reader').hidden = true; document.body.classList.remove('in-reader');
+  if (!stay) { render(); }
+}
+async function loadLocations(b, gen) {
+  const book = R.book;
+  try {
+    const saved = await IDB.get('locs', b.id);
+    if (saved) book.locations.load(saved);
+    else { await book.locations.generate(1024); IDB.put('locs', b.id, book.locations.save()).catch(() => {}); }
+  } catch (e) { console.warn('locations', e); return; }
+  if (gen !== R.gen) return;
+  R.locReady = true;
+  const total = book.locations.length();
+  const rec = store.books[b.id];
+  let dirty = false;
+  if (rec && total && rec.pages !== total) { rec.pages = total; touch(rec); dirty = true; }
+  for (const r of Object.values(store.marks)) {
+    if (r.deleted || r.book_id !== b.id || !r.cfi || r.loc != null) continue;
+    const n = book.locations.locationFromCfi(r.cfi);
+    if (n >= 0) { r.loc = n + 1; touch(r); dirty = true; }
+  }
+  if (dirty) { persist(); scheduleSync(); derive(); }
+  const cur = R.rend && R.rend.currentLocation();
+  if (cur && cur.start) onRelocated(cur);
+}
+function spineIndexOf(href) {
+  const clean = String(href || '').split('#')[0];
+  let s = null;
+  try { s = R.book.spine.get(clean) || R.book.spine.get(decodeURI(clean)); } catch { s = null; }
+  if (s) return { index: s.index, href: s.href };
+  const base = decodeURI(clean).split('/').pop();
+  const it = R.book.spine.spineItems.find((x) => decodeURI(x.href).split('/').pop() === base);
+  return it ? { index: it.index, href: it.href } : { index: -1, href: clean };
+}
+function buildToc(items) {
+  const flat = [];
+  const walk = (list, lv) => list.forEach((it) => {
+    const hash = String(it.href || '').split('#')[1];
+    const sp = spineIndexOf(it.href);
+    flat.push({ label: String(it.label || '').replace(/\s+/g, ' ').trim() || 'Untitled', lv: Math.min(lv, 3), idx: sp.index, target: sp.index >= 0 ? sp.href + (hash ? '#' + hash : '') : it.href });
+    if (it.subitems && it.subitems.length) walk(it.subitems, lv + 1);
+  });
+  walk(items, 0);
+  R.toc = flat;
+  R.chapters = flat.filter((x) => x.idx >= 0);
+  if (R.pos) { R.pos.chapter = chapterOf(R.pos.index); $('#rdChap').textContent = R.pos.chapter || ''; }
+}
+function chapterOf(index) {
+  let best = null;
+  for (const c of R.chapters) if (c.idx <= index && (!best || c.idx >= best.idx)) best = c;
+  return best ? best.label : '';
+}
+function onRelocated(loc) {
+  if (!R.open || !loc || !loc.start) return;
+  const cfi = loc.start.cfi;
+  let pct = null, n = null;
+  if (R.locReady) { pct = R.book.locations.percentageFromCfi(cfi); n = R.book.locations.locationFromCfi(cfi) + 1; }
+  R.pos = { cfi, pct, n, index: loc.start.index, chapter: chapterOf(loc.start.index), atEnd: !!loc.atEnd, atStart: !!loc.atStart };
+  const b = S.books.find((x) => x.id === R.bookId);
+  $('#rdChap').textContent = R.pos.chapter || (b && b.author) || '';
+  if (!R.sel) rdBot();
+  clearTimeout(R.saveT); R.saveT = setTimeout(savePosition, 1200);
+}
+function savePosition() {
+  const rec = store.books[R.bookId]; if (!rec || !R.pos || rec.last_cfi === R.pos.cfi) return;
+  rec.last_cfi = R.pos.cfi;
+  if (R.pos.pct != null) rec.last_pct = Math.round(R.pos.pct * 1000) / 1000;
+  rec.touched_at = nowISO(); touch(rec);
+  persist(); scheduleSync(); derive();
+}
+function rdBot() {
+  const el = $('#rdBot'); if (!el) return;
+  if (R.sel) {
+    el.innerHTML = `<p class="rd-sel">“${esc(R.sel.text.slice(0, 160))}${R.sel.text.length > 160 ? '…' : ''}”</p><button type="button" class="btn" data-act="rd-sel-clear">Cancel</button><button type="button" class="btn primary" data-act="rd-mark">Mark this</button>`;
+    return;
+  }
+  const p = R.pos, b = S.books.find((x) => x.id === R.bookId);
+  const pctTxt = p && p.pct != null ? Math.round(p.pct * 100) + '%' : '';
+  const locTxt = !p ? '' : p.n ? `loc ${fmtN(p.n)}${b && b.pages ? ' of ' + fmtN(b.pages) : ''}` : (R.open && R.book ? 'Counting locations…' : '');
+  el.innerHTML = `<button type="button" class="rd-btn" data-act="rd-prev" aria-label="Previous page"${p && p.atStart ? ' disabled' : ''}>${I.back}</button>
+    <div class="rd-pos"><b>${pctTxt || '&nbsp;'}</b><span>${locTxt || 'Select text to mark it'}</span><span class="rd-bar" aria-hidden="true"><i style="width:${p && p.pct != null ? Math.round(p.pct * 100) : 0}%"></i></span></div>
+    <button type="button" class="rd-btn" data-act="rd-mark-spot" aria-label="Mark this page without selecting">${I.pen}</button>
+    <button type="button" class="rd-btn" data-act="rd-next" aria-label="Next page"${p && p.atEnd ? ' disabled' : ''}>${I.fwd}</button>`;
+}
+function onSelected(cfi, contents) {
+  const text = String(contents.window.getSelection() || '').replace(/\s+/g, ' ').trim();
+  if (!text) return;
+  R.sel = { cfi, text, contents };
+  rdBot();
+}
+function clearSelection() {
+  try { R.sel && R.sel.contents.window.getSelection().removeAllRanges(); } catch { /* frame gone */ }
+  R.sel = null; rdBot();
+}
+function onContent(contents) {
+  const doc = contents.document;
+  doc.addEventListener('selectionchange', () => {
+    const s = doc.getSelection();
+    if ((!s || s.isCollapsed) && R.sel && R.sel.contents === contents) { R.sel = null; rdBot(); }
+  });
+  // Swipe left or right to turn the page (not while selecting).
+  let sx = 0, sy = 0, st = 0;
+  doc.addEventListener('touchstart', (e) => { const t = e.changedTouches[0]; sx = t.screenX; sy = t.screenY; st = Date.now(); }, { passive: true });
+  doc.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0], dx = t.screenX - sx, dy = t.screenY - sy;
+    if (Date.now() - st > 700 || Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+    const s = doc.getSelection(); if (s && !s.isCollapsed) return;
+    R.swiped = Date.now();
+    if (dx < 0) R.rend.next(); else R.rend.prev();
+  }, { passive: true });
+}
+// Tap the left or right edge of the page to turn it.
+function onReaderClick(e) {
+  if (!R.rend || (R.swiped && Date.now() - R.swiped < 500)) return;
+  if (e.target && e.target.closest && e.target.closest('a')) return;
+  const sel = e.view && e.view.getSelection && e.view.getSelection(); if (sel && !sel.isCollapsed) return;
+  const frame = e.view && e.view.frameElement; const box = $('#viewer').getBoundingClientRect();
+  if (!frame) return;
+  const x = e.clientX + frame.getBoundingClientRect().left - box.left;
+  if (x < box.width * 0.2) R.rend.prev(); else if (x > box.width * 0.8) R.rend.next();
+}
+function rdKey(e) {
+  if (!R.open || $$('dialog[open]').length) return;
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') R.rend && R.rend.next();
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') R.rend && R.rend.prev();
+  else if (e.key === 'Escape' && e.type === 'keydown') closeReader();
+}
+function applyReaderPrefs() {
+  const c = rdCfg(), t = rdTheme();
+  $('#reader').dataset.rt = t;
+  if (!R.rend) return;
+  R.rend.themes.select(t);
+  R.rend.themes.fontSize(c.size + '%');
+  R.rend.themes.font(RD_FONTS[c.font] || RD_FONTS.serif);
+  R.hl.clear(); setTimeout(paintHighlights, 60);   // re-layout drops the drawn highlights
+}
+
+/* highlights drawn in the text: your kept marks in the book's colour, Inbox ones in orange */
+let hlTapAt = 0;
+function paintHighlights() {
+  if (!R.open || !R.rend) return;
+  const want = new Map();
+  for (const r of Object.values(store.marks)) {
+    if (r.deleted || r.book_id !== R.bookId || !r.cfi || !r.quote) continue;
+    want.set(r.id, { cfi: r.cfi, kind: r.status === 'inbox' ? 'inbox' : 'kept' });
+  }
+  for (const [id, h] of R.hl) {
+    const w = want.get(id);
+    if (!w || w.cfi !== h.cfi || w.kind !== h.kind) { try { R.rend.annotations.remove(h.cfi, 'highlight'); } catch { /* not drawn */ } R.hl.delete(id); }
+  }
+  const b = S.books.find((x) => x.id === R.bookId), fill = pal(b ? b.color : 'moss').a;
+  for (const [id, w] of want) {
+    if (R.hl.has(id)) continue;
+    try {
+      try { R.rend.annotations.remove(w.cfi, 'highlight'); } catch { /* first time */ }
+      R.rend.annotations.highlight(w.cfi, { id }, (e) => onHighlightTap(id, e), 'cairn-hl', { fill: w.kind === 'inbox' ? '#FF9500' : fill, 'fill-opacity': '0.32', 'mix-blend-mode': 'normal' });
+      R.hl.set(id, w);
+    } catch (e) { console.warn('highlight', e); }
+  }
+}
+function onHighlightTap(id, e) {
+  if (e && e.type === 'touchstart') return;   // wait for the click, so a swipe that starts on a highlight still turns the page
+  if (Date.now() - hlTapAt < 600) return; hlTapAt = Date.now();
+  const rec = store.marks[id]; if (!rec || rec.deleted) return;
+  if (rec.status === 'inbox') openReaderMark(id); else openDetail(id);
+}
+
+/* contents and text settings */
+function openToc() {
+  const cur = R.pos ? chapterOf(R.pos.index) : '';
+  $('#tocBody').innerHTML = `<div class="sheet-head"><span></span><h2>Contents</h2><button type="button" class="link strong" data-act="close">Done</button></div>
+    ${R.toc.length ? `<ul class="toc">${R.toc.map((c, i) => `<li><button type="button" style="--lv:${c.lv}" data-act="rd-toc-go" data-i="${i}" aria-current="${c.label === cur && c.idx === (R.chapters.find((x) => x.label === cur) || {}).idx}">${esc(c.label)}</button></li>`).join('')}</ul>` : '<p class="help">This book has no table of contents.</p>'}`;
+  openSheet('sheetToc');
+  const on = $('#tocBody [aria-current="true"]'); if (on) on.scrollIntoView({ block: 'center' });
+}
+function openReaderSettings() { renderReaderSettings(); openSheet('sheetRset'); }
+function renderReaderSettings() {
+  const c = rdCfg();
+  const themes = [['auto', 'Auto'], ['light', 'Light'], ['sepia', 'Sepia'], ['dark', 'Dark']], ti = themes.findIndex(([k]) => k === c.theme);
+  const fonts = [['serif', 'Serif'], ['sans', 'Sans']], fi = fonts.findIndex(([k]) => k === c.font);
+  $('#rsBody').innerHTML = `<div class="sheet-head"><span></span><h2>Text</h2><button type="button" class="link strong" data-act="close">Done</button></div>
+    <div class="field"><span class="lbl">Size</span><div class="stepper-row"><button type="button" class="btn" data-act="rd-size" data-v="-1" aria-label="Smaller text"${c.size <= 70 ? ' disabled' : ''}>A−</button><b>${c.size}%</b><button type="button" class="btn" data-act="rd-size" data-v="1" aria-label="Larger text"${c.size >= 200 ? ' disabled' : ''}>A+</button></div></div>
+    <div class="field"><span class="lbl">Theme</span><div class="seg" role="group" aria-label="Theme" style="--n:4"><span class="thumb" aria-hidden="true" style="transform:translateX(${Math.max(0, ti) * 100}%)"></span>${themes.map(([k, l]) => `<button type="button" aria-pressed="${c.theme === k}" data-act="rd-theme" data-v="${k}">${l}</button>`).join('')}</div><p class="help">Auto follows Cairn’s light or dark appearance.</p></div>
+    <div class="field"><span class="lbl">Font</span><div class="seg" role="group" aria-label="Font" style="--n:2"><span class="thumb" aria-hidden="true" style="transform:translateX(${Math.max(0, fi) * 100}%)"></span>${fonts.map(([k, l]) => `<button type="button" aria-pressed="${c.font === k}" data-act="rd-font" data-v="${k}">${l}</button>`).join('')}</div></div>`;
+}
+
+/* mark from the reader: the selected line, or the spot you're on */
+let RM = null;
+function openReaderMark(existingId) {
+  const b = S.books.find((x) => x.id === R.bookId); if (!b) return;
+  if (existingId) {
+    const r = store.marks[existingId]; if (!r) return;
+    RM = { id: r.id, quote: r.quote, text: r.text || '', cfi: r.cfi, chapter: r.chapter, loc: r.loc, inbox: r.status === 'inbox' };
+  } else if (R.sel) {
+    const cfi = R.sel.cfi; let idx = -1;
+    try { const s = R.book.spine.get(cfi); idx = s ? s.index : -1; } catch { idx = -1; }
+    RM = { id: null, quote: R.sel.text.slice(0, 2000), text: '', cfi, chapter: chapterOf(idx), loc: R.locReady ? R.book.locations.locationFromCfi(cfi) + 1 : null };
+  } else if (R.pos) {
+    RM = { id: null, quote: null, text: '', cfi: R.pos.cfi, chapter: R.pos.chapter, loc: R.pos.n };
+  } else return;
+  const where = [RM.chapter, RM.loc ? `loc ${fmtN(RM.loc)}` : ''].filter(Boolean).join(' · ');
+  const body = $('#rmBody'); setAcc(body, b.color);
+  body.innerHTML = `<form id="rmForm" class="sheet-in" style="padding:0" novalidate>
+      <div class="sheet-head"><button type="button" class="link" data-act="close">Cancel</button><h2>${RM.id ? 'Your highlight' : RM.quote ? 'Mark this line' : 'Mark this page'}</h2><button type="submit" class="link strong">Keep</button></div>
+      ${where ? `<p class="eyebrow" style="color:var(--acc)">${esc(where)}</p>` : ''}
+      ${RM.quote ? `<p class="quote clamp">${esc(RM.quote)}</p>` : ''}
+      <div class="field"><label class="lbl" for="rmText">Your line</label><textarea id="rmText" class="tx" rows="2" maxlength="280" placeholder="What this says, in your own words">${esc(RM.text)}</textarea>
+        <p class="help">${RM.quote ? 'Write it now, or tap Later and write it in your Inbox.' : 'One line about this page in your own words.'}</p></div>
+      <p class="err-msg" id="rmErr" role="alert"></p>
+      <div class="row end">${RM.quote && !(RM.id && RM.inbox) ? `<button type="button" class="btn" data-act="rm-later">Later</button>` : ''}<button type="submit" class="btn primary">Keep</button></div>
+      ${RM.id ? `<button type="button" class="link danger" style="align-self:center" data-act="rm-remove">Remove highlight</button>` : ''}
+    </form>`;
+  openSheet('sheetRmark');
+  setTimeout(() => { const t = $('#rmText'); if (t) t.focus(); }, 60);
+}
+function saveReaderMark(later) {
+  if (!RM) return;
+  const text = ($('#rmText').value || '').trim().replace(/\s+/g, ' ');
+  if (!later && !text) { $('#rmErr').textContent = RM.quote ? 'Write one line in your own words, or tap Later.' : 'Write one line about this page.'; $('#rmText').focus(); return; }
+  let id = RM.id;
+  if (id) {
+    const r = store.marks[id];
+    Object.assign(r, { text, status: 'kept', rev_n: 0, rev_due: isoAt(Date.now() + DAY) }); touch(r);
+  } else {
+    id = addMark(R.bookId, { loc: RM.loc, cfi: RM.cfi, chapter: RM.chapter || null, quote: RM.quote, text, status: later ? 'inbox' : 'kept', source: 'epub' }).id;
+  }
+  bump(R.bookId); config.lastBookId = R.bookId; saveConfig();
+  changed();
+  if (R.sel) clearSelection();
+  closeSheets(); paintHighlights(); render();
+  if (later) toast('In your Inbox. Write the line when you’re done reading.');
+  else toast('Marked', allMarks().length > 1 ? { label: 'Link it', act: () => openLink(id) } : null);
+}
+function removeReaderMark() {
+  const r = RM && RM.id && store.marks[RM.id]; if (!r) return;
+  r.deleted = true; touch(r);
+  Object.values(store.links).forEach((l) => { if (!l.deleted && (l.a === r.id || l.b === r.id)) { l.deleted = true; touch(l); } });
+  changed(); closeSheets(); paintHighlights(); render(); toast('Highlight removed');
+}
+
 /* toast */
 let toastTimer = null;
 function toast(msg, action) {
@@ -1310,7 +1763,7 @@ const ACT = {
   'mark-unit': (t) => { MK.unit = t.dataset.v; renderMarkUnit(); focusSpot(); },
   'start-on': (t) => { config.startOn = t.dataset.v; saveConfig(); renderMenu(); },
   'open-mark': (t) => openDetail(t.dataset.id),
-  'goto-mark': (t) => { const f = findMark(t.dataset.id); if (!f) return; closeSheets(); V.bookId = f.b.id; V.flash = f.m.id; V.name = 'book'; render(); },
+  'goto-mark': (t) => { const f = findMark(t.dataset.id); if (!f) return; if (R.open) closeReader(true); closeSheets(); V.bookId = f.b.id; V.flash = f.m.id; V.name = 'book'; render(); },
   sort: (t) => { config.sort = t.dataset.sort; saveConfig(); render(); },
   close: () => closeSheets(),
   'del-mark': (t) => armed('mark-' + DT.id, t, 'Tap again to delete', deleteMark),
@@ -1328,7 +1781,23 @@ const ACT = {
   'rv-got': () => grade(true),
   'rv-forgot': () => grade(false),
   'rv-practice': () => { const all = allMarks(); const p = all[Math.floor(Math.random() * all.length)]; V.rv = { ...V.rv, id: p.m.id, shown: false, started: true }; render(); },
-  import: (t) => openImport(t.dataset.book),
+  import: (t) => openImport(t.dataset.book, t.dataset.mode),
+  read: (t) => { const id = t.dataset.book; V.name = 'book'; V.bookId = id; render(); openReader(id); },
+  'read-mark': (t) => { const r = store.marks[t.dataset.id]; if (r && r.cfi) openReader(r.book_id, r.cfi); },
+  'rd-close': () => closeReader(),
+  'rd-prev': () => R.rend && R.rend.prev(),
+  'rd-next': () => R.rend && R.rend.next(),
+  'rd-toc': () => openToc(),
+  'rd-toc-go': (t) => { const c = R.toc[+t.dataset.i]; closeSheets(); if (c && R.rend) R.rend.display(c.target).catch(() => toast('That chapter couldn’t be opened.')); },
+  'rd-set': () => openReaderSettings(),
+  'rd-size': (t) => { const c = rdCfg(); c.size = Math.max(70, Math.min(200, c.size + 10 * +t.dataset.v)); saveConfig(); applyReaderPrefs(); renderReaderSettings(); },
+  'rd-theme': (t) => { rdCfg().theme = t.dataset.v; saveConfig(); applyReaderPrefs(); renderReaderSettings(); },
+  'rd-font': (t) => { rdCfg().font = t.dataset.v; saveConfig(); applyReaderPrefs(); renderReaderSettings(); },
+  'rd-mark': () => openReaderMark(),
+  'rd-mark-spot': () => openReaderMark(),
+  'rd-sel-clear': () => clearSelection(),
+  'rm-later': () => saveReaderMark(true),
+  'rm-remove': (t) => armed('rm-' + (RM && RM.id), t, 'Tap again to remove', removeReaderMark),
   'im-mode': (t) => { IM.mode = t.dataset.v; IM.err = ''; renderImport(); },
   'im-read': () => readPhotos(),
   'im-add': () => addParsed(),
@@ -1342,7 +1811,7 @@ const ACT = {
   signin: () => openAuth(),
   signout: async () => { if (sb) await sb.auth.signOut(); closeSheets(); toast('Signed out. Your shelf stays on this device.'); },
   sync: () => syncNow(),
-  theme: (t) => { config.theme = t.dataset.v; saveConfig(); applyTheme(); renderMenu(); },
+  theme: (t) => { config.theme = t.dataset.v; saveConfig(); applyTheme(); renderMenu(); if (R.open) applyReaderPrefs(); },
   'export-md': () => exportMd(),
   'export-json': () => exportJson(),
   install: async () => { if (!deferredInstall) return; deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; renderMenu(); }
@@ -1362,6 +1831,7 @@ function wire() {
     else if (id === 'bookForm') submitBook(e);
     else if (id === 'detailForm') submitDetail(e);
     else if (id === 'authForm') submitAuth(e);
+    else if (id === 'rmForm') { e.preventDefault(); saveReaderMark(false); }
     else if (id === 'askForm') {
       e.preventDefault();
       V.ask.q = $('#askQ').value.trim();
@@ -1376,6 +1846,7 @@ function wire() {
     else if (t.name === 'imBook') { IM.title = ($('#imTitle') || {}).value || IM.title; IM.author = ($('#imAuthor') || {}).value || IM.author; IM.bookId = t.value; renderImport(); }
     else if (t.id === 'photoInput') { IM.files = [...t.files].slice(0, 20); IM.err = t.files.length > 20 ? 'Only the first 20 photos are used. Import the rest next.' : ''; t.value = ''; renderImport(); }
     else if (t.id === 'clipInput') { const f = t.files[0]; t.value = ''; if (f) readClipFile(f); }
+    else if (t.id === 'epubInput') { const f = t.files[0]; t.value = ''; if (f) importEpub(f); }
     else if (t.dataset && t.dataset.pick) { if (t.checked) IM.pick.add(t.dataset.pick); else IM.pick.delete(t.dataset.pick); renderImport(); }
   });
   document.addEventListener('input', (e) => {
@@ -1403,17 +1874,20 @@ function wire() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.id === 'markPage') { e.preventDefault(); $('#markText').focus(); }
     else if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'markText') { e.preventDefault(); $('#markForm').requestSubmit(); }
+    else if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'rmText') { e.preventDefault(); $('#rmForm').requestSubmit(); }
+    else if (R.open && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) rdKey(e);
   });
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
     syncNow(); if (V.name !== 'inbox') queueRender();
     // Coming back to the app after a while counts as opening it.
-    if (config.startOn === 'mark' && hiddenAt && Date.now() - hiddenAt > 5 * 60000 && !$$('dialog[open]').length && S.books.length) openMark();
+    if (config.startOn === 'mark' && !R.open && hiddenAt && Date.now() - hiddenAt > 5 * 60000 && !$$('dialog[open]').length && S.books.length) openMark();
   });
   window.addEventListener('online', syncNow);
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; });
-  window.addEventListener('beforeunload', persistNow);
+  window.addEventListener('beforeunload', () => { if (R.open) savePosition(); persistNow(); });
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (R.open) applyReaderPrefs(); }); } catch { /* old browsers */ }
   setInterval(() => { syncNow(); if (V.name !== 'ask' && V.name !== 'inbox') queueRender(); }, 60000);
 }
 
@@ -1426,10 +1900,11 @@ async function init() {
   const wantMark = new URLSearchParams(location.search).has('mark') || config.startOn === 'mark';
   if (location.search) history.replaceState(null, '', location.pathname);
   if (wantMark && S.books.length) openMark();
+  IDB.keys('files').then((keys) => keys.forEach((k) => { const b = store.books[k]; if (b && b.deleted) { IDB.del('files', k); IDB.del('locs', k); } }));
   await initSupabase();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-window.Cairn = { get store() { return store; }, get S() { return S; }, syncNow, search, parseClippings, parseNotebookHtml };
+window.Cairn = { get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
 init();
 })();

@@ -374,3 +374,43 @@ body.in-book .toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
 .ib .tx { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--fill2); font-style: normal; }
 .ib .tx:focus { box-shadow: 0 0 0 2px var(--acc); }
 #markSpotHint:empty { display: none; }
+
+.row.end { justify-content: flex-end; }
+
+/* reader: its own light, sepia and dark themes, independent of the app's */
+body.in-reader { overflow: hidden; }
+body.in-reader .tabbar, body.in-reader #bookBar { display: none !important; }
+.reader { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--rd-bg); color: var(--rd-fg);
+  --rd-bg: #FFFFFF; --rd-fg: #1C1C1E; --rd-ink2: rgba(60, 60, 67, .66); --rd-sep: rgba(60, 60, 67, .16); --rd-fill: rgba(118, 118, 128, .12); }
+.reader[data-rt="sepia"] { --rd-bg: #F6EFE2; --rd-fg: #3B2F23; --rd-ink2: rgba(59, 47, 35, .68); --rd-sep: rgba(59, 47, 35, .16); --rd-fill: rgba(59, 47, 35, .08); }
+.reader[data-rt="dark"] { --rd-bg: #121212; --rd-fg: #E5E5EA; --rd-ink2: rgba(235, 235, 245, .62); --rd-sep: rgba(84, 84, 88, .6); --rd-fill: rgba(118, 118, 128, .24); --acc: var(--acc-d); }
+.reader .link { color: var(--acc); }
+.rd-top { flex: none; display: flex; align-items: center; gap: 4px; min-height: 52px; padding: calc(4px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 4px max(14px, env(safe-area-inset-left, 0px)); border-bottom: .5px solid var(--rd-sep); }
+.rd-title { flex: 1; min-width: 0; text-align: center; padding: 0 6px; }
+.rd-title b, .rd-title span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-title b { font: 700 15px/1.25 var(--round); }
+.rd-title span { font-size: 12px; color: var(--rd-ink2); }
+.rd-btn { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--acc); display: grid; place-items: center; }
+.rd-btn:active { background: var(--rd-fill); }
+.rd-btn:disabled { opacity: .35; }
+.rd-stage { flex: 1; min-height: 0; position: relative; }
+#viewer { position: absolute; inset: 8px max(10px, env(safe-area-inset-right, 0px)) 4px max(10px, env(safe-area-inset-left, 0px)); }
+.rd-msg { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 16px; line-height: 1.5; color: var(--rd-ink2); background: var(--rd-bg); }
+.rd-msg.err { color: var(--err-ink); }
+.rd-bot { flex: none; display: flex; align-items: center; gap: 6px; min-height: 62px; padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); border-top: .5px solid var(--rd-sep); }
+.rd-pos { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rd-pos b { font: 700 13px/1.2 var(--round); font-variant-numeric: tabular-nums; }
+.rd-pos span { font-size: 12px; color: var(--rd-ink2); font-variant-numeric: tabular-nums; }
+.rd-bar { width: min(240px, 100%); height: 3px; border-radius: 2px; background: var(--rd-fill); overflow: hidden; }
+.rd-bar i { display: block; height: 100%; background: var(--acc); }
+.rd-sel { flex: 1; min-width: 0; margin: 0 4px; font: italic 400 15px/1.3 var(--serif); color: var(--rd-ink2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rd-bot .btn { min-height: 44px; }
+
+/* contents and text settings */
+.toc { list-style: none; margin: 0; padding: 0; border-radius: 16px; background: var(--fill); max-height: 62vh; overflow-y: auto; }
+.toc li + li { border-top: .5px solid var(--sep); }
+.toc button { display: block; width: 100%; min-height: 48px; padding: 12px 14px 12px calc(14px + var(--lv, 0) * 16px); border: 0; background: none; text-align: left; font: 500 16px/1.35 var(--text); color: var(--ink); }
+.toc button[aria-current="true"] { font-weight: 700; color: var(--acc); }
+.stepper-row { display: flex; align-items: center; gap: 12px; }
+.stepper-row .btn { min-width: 64px; }
+.stepper-row b { min-width: 60px; text-align: center; font: 800 17px var(--round); font-variant-numeric: tabular-nums; }

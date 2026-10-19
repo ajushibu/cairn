@@ -1,10 +1,10 @@
 // Network-first for the app shell (so updates arrive), cache fallback for offline.
 // Bump CACHE to force-refresh every device.
-const CACHE = 'cairn-v3';
+const CACHE = 'cairn-v4';
 const SHELL = [
   './', 'index.html', 'config.js', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png',
-  'vendor/supabase.js'
+  'vendor/supabase.js', 'vendor/jszip.min.js', 'vendor/epub.min.js'
 ];
 
 self.addEventListener('install', e => {

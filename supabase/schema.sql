@@ -101,3 +101,36 @@ alter table public.cairn_marks add column if not exists quote text;
 alter table public.cairn_marks add column if not exists status text not null default 'kept';
 -- Where a mark came from: null (typed), 'kindle-photo', 'kindle-clippings' or 'kindle-export'.
 alter table public.cairn_marks add column if not exists source text;
+
+-- EPUB reader (added with the in-app reader). Safe to run more than once.
+-- Books can now also be 'epub'. The file lives in Storage; these columns say where, and where you left off.
+alter table public.cairn_books add column if not exists file_path text;
+alter table public.cairn_books add column if not exists file_size int;
+alter table public.cairn_books add column if not exists last_cfi text;
+alter table public.cairn_books add column if not exists last_pct real;
+-- A mark made in the reader keeps the exact spot (an EPUB CFI) and the chapter it's in.
+alter table public.cairn_marks add column if not exists cfi text;
+alter table public.cairn_marks add column if not exists chapter text;
+
+-- A private bucket for EPUB files. Each file sits under your user id: <user id>/<book id>.epub
+-- 50 MB is the largest single file Supabase's free plan accepts.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cairn-books', 'cairn-books', false, 52428800, array['application/epub+zip', 'application/octet-stream'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "cairn books: read own files" on storage.objects;
+create policy "cairn books: read own files" on storage.objects for select to authenticated
+  using (bucket_id = 'cairn-books' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cairn books: add own files" on storage.objects;
+create policy "cairn books: add own files" on storage.objects for insert to authenticated
+  with check (bucket_id = 'cairn-books' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cairn books: replace own files" on storage.objects;
+create policy "cairn books: replace own files" on storage.objects for update to authenticated
+  using (bucket_id = 'cairn-books' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'cairn-books' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cairn books: delete own files" on storage.objects;
+create policy "cairn books: delete own files" on storage.objects for delete to authenticated
+  using (bucket_id = 'cairn-books' and (storage.foldername(name))[1] = auth.uid()::text);

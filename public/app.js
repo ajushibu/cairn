@@ -1454,12 +1454,16 @@ function forceInk(contents, t) {
 // The page behind the reader (and the browser's bar) takes the reader's colour, so no light strip shows under the controls.
 function rdChrome(on, t) {
   const root = document.documentElement;
-  document.querySelectorAll('meta[name="theme-color"][data-rd]').forEach((m) => m.remove());
-  if (!on) { root.style.removeProperty('background-color'); document.body.style.removeProperty('background-color'); return; }
+  const metas = [...document.querySelectorAll('meta[name="theme-color"]')];
+  if (!on) {
+    root.style.removeProperty('background-color'); document.body.style.removeProperty('background-color');
+    metas.forEach((m) => { if (m.dataset.orig != null) { m.content = m.dataset.orig; delete m.dataset.orig; } });
+    return;
+  }
   const bg = (RD_PAGE[t] || RD_PAGE.light)[0];
   root.style.backgroundColor = bg; document.body.style.backgroundColor = bg;
-  const m = document.createElement('meta'); m.name = 'theme-color'; m.content = bg; m.dataset.rd = '1';
-  document.head.appendChild(m);
+  // Change the page's own theme-color tags (Chrome uses the first one that matches), keeping their originals to put back.
+  metas.forEach((m) => { if (m.dataset.orig == null) m.dataset.orig = m.content; m.content = bg; });
 }
 const RD_FONTS = { serif: 'ui-serif, "New York", "Iowan Old Style", Georgia, serif', sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif' };
 const R = { open: false, gen: 0, bookId: null, book: null, rend: null, sel: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false, saveT: null };

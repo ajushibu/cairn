@@ -1482,7 +1482,7 @@ async function openReader(bookId, target) {
   if (R.open) closeReader(true);
   closeSheets();
   const gen = ++R.gen;
-  Object.assign(R, { open: true, bookId, sel: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false });
+  Object.assign(R, { open: true, bookId, sel: null, ext: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false });
   const el = $('#reader'); setAcc(el, b.color); el.dataset.rt = rdTheme(); el.hidden = false;
   document.body.classList.add('in-reader');
   $('#rdBook').textContent = b.title; $('#rdChap').textContent = b.author || '';
@@ -1519,7 +1519,7 @@ function closeReader(stay) {
   clearTimeout(R.saveT); savePosition();
   // Only the rendition is torn down: destroying the book mid-load (contents, locations) throws inside epub.js.
   try { R.rend && R.rend.destroy(); } catch { /* already gone */ }
-  Object.assign(R, { open: false, book: null, rend: null, sel: null, hl: new Map() });
+  Object.assign(R, { open: false, book: null, rend: null, sel: null, ext: null, hl: new Map() });
   R.gen++;
   $('#viewer').innerHTML = ''; rdMsg('');
   $('#reader').hidden = true; document.body.classList.remove('in-reader');
@@ -1575,8 +1575,17 @@ function chapterOf(index) {
   for (const c of R.chapters) if (c.idx <= index && (!best || c.idx >= best.idx)) best = c;
   return best ? best.label : '';
 }
+// A page is exactly one column step wide. If anything leaves the book sitting between two pages (a viewport change,
+// a swipe that landed oddly, a chapter that ends short), nudge it onto the nearest page so no half-page shows.
+function snapPage() {
+  const m = R.open && R.rend && R.rend.manager;
+  if (!m || !m.container || !m.layout || !(m.layout.delta > 0)) return;
+  const c = m.container, d = m.layout.delta, sl = c.scrollLeft, off = Math.round(sl / d) * d;
+  if (Math.abs(sl - off) > 1.5 && off <= c.scrollWidth - c.clientWidth + 1) c.scrollLeft = off;
+}
 function onRelocated(loc) {
   if (!R.open || !loc || !loc.start) return;
+  clearTimeout(R.snapT); R.snapT = setTimeout(snapPage, 160);
   const cfi = loc.start.cfi;
   let pct = null, n = null;
   if (R.locReady) { pct = R.book.locations.percentageFromCfi(cfi); n = R.book.locations.locationFromCfi(cfi) + 1; }
@@ -1595,8 +1604,13 @@ function savePosition() {
 }
 function rdBot() {
   const el = $('#rdBot'); if (!el) return;
+  if (R.ext && !R.sel) {
+    el.innerHTML = `<p class="rd-sel">Turn the page, then touch and hold the last word to include.</p><button type="button" class="btn" data-act="rd-sel-clear">Cancel</button>`;
+    return;
+  }
   if (R.sel) {
-    el.innerHTML = `<p class="rd-sel">“${esc(R.sel.text.slice(0, 160))}${R.sel.text.length > 160 ? '…' : ''}”</p><button type="button" class="btn" data-act="rd-sel-clear">Cancel</button><button type="button" class="btn primary" data-act="rd-mark">Mark this</button>`;
+    const t = R.sel.text, long = t.length > 110 ? '…' + t.slice(-100) : t;
+    el.innerHTML = `<p class="rd-sel">“${esc(long)}”</p><button type="button" class="btn" data-act="rd-sel-clear">Cancel</button><button type="button" class="btn" data-act="rd-extend" aria-label="Extend the selection onto the next page">Extend</button><button type="button" class="btn primary" data-act="rd-mark">Mark</button>`;
     return;
   }
   const p = R.pos, b = S.books.find((x) => x.id === R.bookId);
@@ -1610,12 +1624,33 @@ function rdBot() {
 function onSelected(cfi, contents) {
   const text = String(contents.window.getSelection() || '').replace(/\s+/g, ' ').trim();
   if (!text) return;
+  if (R.ext) {
+    const ext = R.ext; R.ext = null;
+    const win = contents.window, sel = win.getSelection();
+    if (ext.contents.document === contents.document && sel.rangeCount) {
+      // Same chapter: one range from where the first selection began to where this one ends.
+      try {
+        const end = sel.getRangeAt(0), r = contents.document.createRange();
+        r.setStart(ext.range.startContainer, ext.range.startOffset); r.setEnd(end.endContainer, end.endOffset);
+        const joined = r.toString().replace(/\s+/g, ' ').trim();
+        if (!r.collapsed && joined.length > ext.text.length) {
+          R.sel = { cfi: contents.cfiFromRange(r), text: joined, contents };
+          sel.removeAllRanges(); sel.addRange(r);
+          rdBot(); return;
+        }
+      } catch { /* fall through to the plain selection */ }
+    } else if (ext.contents.document !== contents.document) {
+      // The next chapter is a different document, so keep both parts of the text and the first spot.
+      R.sel = { cfi: ext.cfi, text: (ext.text + ' ' + text).slice(0, 1500), contents };
+      rdBot(); return;
+    }
+  }
   R.sel = { cfi, text, contents };
   rdBot();
 }
 function clearSelection() {
   try { R.sel && R.sel.contents.window.getSelection().removeAllRanges(); } catch { /* frame gone */ }
-  R.sel = null; rdBot();
+  R.sel = null; R.ext = null; rdBot();
 }
 function onContent(contents) {
   const doc = contents.document;
@@ -1824,6 +1859,13 @@ const ACT = {
   'rd-mark': () => openReaderMark(),
   'rd-mark-spot': () => openReaderMark(),
   'rd-sel-clear': () => clearSelection(),
+  'rd-extend': () => {
+    if (!R.sel || !R.rend) return;
+    let range; try { range = R.sel.contents.range(R.sel.cfi); } catch { range = null; }
+    if (!range) { toast('That selection can’t be extended. Select it again.'); return; }
+    R.ext = { range, cfi: R.sel.cfi, text: R.sel.text, contents: R.sel.contents };
+    R.sel = null; rdBot(); R.rend.next();
+  },
   'rm-later': () => saveReaderMark(true),
   'rm-remove': (t) => armed('rm-' + (RM && RM.id), t, 'Tap again to remove', removeReaderMark),
   'im-mode': (t) => { IM.mode = t.dataset.v; IM.err = ''; renderImport(); },

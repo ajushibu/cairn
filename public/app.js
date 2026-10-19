@@ -199,7 +199,9 @@ async function api(path, payload, signal) {
   if (!res.ok) throw new Error(API_ERRORS[j.error] || `Claude couldn’t answer (${j.error || res.status}). Try again.`);
   return j;
 }
-const noteFor = ({ m, b }) => ({ id: m.id, book: b.title, author: b.author, page: m.page, loc: m.loc, text: m.text, quote: m.quote ? m.quote.slice(0, 400) : '' });
+const noteFor = ({ m, b }) => ({ id: m.id, book: b.title, author: b.author, page: m.page, loc: m.loc, chapter: m.chapter || '', text: m.text, quote: m.quote ? m.quote.slice(0, 600) : '' });
+// For link suggestions the reasons already written on a mark go along too, so Claude sees how the reader connects things.
+const noteForLink = (x) => Object.assign(noteFor(x), { see: linksOf(x.m.id).slice(0, 3).map((y) => y.l.because) });
 
 /* ───────────── Supabase sync (same scheme as recall) ───────────── */
 let sb = null, user = null, syncing = false, syncTimer;
@@ -941,12 +943,12 @@ function saveLink() {
 async function suggestLinks() {
   if (!aiOn() || !LK) return;
   const from = findMark(LK.from);
-  const others = allMarks().filter(({ m }) => m.id !== LK.from && !isLinked(LK.from, m.id)).slice(0, 1500);
+  const others = allMarks().filter(({ m }) => m.id !== LK.from && !isLinked(LK.from, m.id)).slice(0, 800);
   if (!others.length) return;
   const keep = LK;
   LK.ai = 'loading'; renderThat();
   try {
-    const r = await api('/api/suggest', { from: noteFor(from), others: others.map(noteFor) });
+    const r = await api('/api/suggest', { from: noteForLink(from), others: others.map(noteForLink) });
     if (LK !== keep) return;
     const ids = (r.ids || []).filter((id) => findMark(id) && id !== LK.from);
     LK.ai = ids.length ? ids : { err: 'Claude didn’t find a close match. Search your marks instead.' };

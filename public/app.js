@@ -1484,7 +1484,7 @@ async function openReader(bookId, target) {
   if (R.open) closeReader(true);
   closeSheets();
   const gen = ++R.gen;
-  Object.assign(R, { open: true, bookId, sel: null, ext: null, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false });
+  Object.assign(R, { open: true, bookId, sel: null, ext: null, pageLeft: null, turnAt: 0, pos: null, toc: [], chapters: [], hl: new Map(), locReady: false });
   const el = $('#reader'); setAcc(el, b.color); el.dataset.rt = rdTheme(); el.hidden = false;
   document.body.classList.add('in-reader');
   $('#rdBook').textContent = b.title; $('#rdChap').textContent = b.author || '';
@@ -1579,11 +1579,34 @@ function chapterOf(index) {
 }
 // A page is exactly one column step wide. If anything leaves the book sitting between two pages (a viewport change,
 // a swipe that landed oddly, a chapter that ends short), nudge it onto the nearest page so no half-page shows.
+// Turn the page. The time is kept so the scroll guard below knows this move was meant.
+function rdTurn(dir) { if (!R.rend) return; R.turnAt = Date.now(); R.rend[dir](); }
+// Dragging a selection handle toward the edge of the screen makes the browser scroll the book underneath it, which
+// slides the page half off. The book only ever moves by whole pages (rdTurn), so any other movement while text is
+// selected, or any up-and-down movement at all, is put back.
+function guardScroll(contents) {
+  const doc = contents.document, win = contents.window, c = R.rend && R.rend.manager && R.rend.manager.container;
+  const turning = () => Date.now() - (R.turnAt || 0) < 900;
+  const hasSel = () => { try { const s = doc.getSelection(); return !!s && !s.isCollapsed; } catch { return false; } };
+  const fixY = () => { const se = doc.scrollingElement; if (se && se.scrollTop !== 0) se.scrollTop = 0; if (win.scrollY) win.scrollTo(0, 0); };
+  win.addEventListener('scroll', fixY, { passive: true });
+  if (c && !c.dataset.guarded) {
+    c.dataset.guarded = '1';
+    c.addEventListener('scroll', () => {
+      if (c.scrollTop) c.scrollTop = 0;
+      if (R.pageLeft != null && !turning() && hasSelAny() && Math.abs(c.scrollLeft - R.pageLeft) > 1) c.scrollLeft = R.pageLeft;
+    }, { passive: true });
+  }
+}
+function hasSelAny() {
+  try { return R.rend.getContents().some((ct) => { const s = ct.document.getSelection(); return s && !s.isCollapsed; }); } catch { return false; }
+}
 function snapPage() {
   const m = R.open && R.rend && R.rend.manager;
   if (!m || !m.container || !m.layout || !(m.layout.delta > 0)) return;
   const c = m.container, d = m.layout.delta, sl = c.scrollLeft, off = Math.round(sl / d) * d;
   if (Math.abs(sl - off) > 1.5 && off <= c.scrollWidth - c.clientWidth + 1) c.scrollLeft = off;
+  R.pageLeft = c.scrollLeft;
 }
 function onRelocated(loc) {
   if (!R.open || !loc || !loc.start) return;
@@ -1657,6 +1680,7 @@ function clearSelection() {
 function onContent(contents) {
   const doc = contents.document;
   forceInk(contents, rdTheme());
+  guardScroll(contents);
   doc.addEventListener('selectionchange', () => {
     const s = doc.getSelection();
     if ((!s || s.isCollapsed) && R.sel && R.sel.contents === contents) { R.sel = null; rdBot(); }
@@ -1669,7 +1693,7 @@ function onContent(contents) {
     if (Date.now() - st > 700 || Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
     const s = doc.getSelection(); if (s && !s.isCollapsed) return;
     R.swiped = Date.now();
-    if (dx < 0) R.rend.next(); else R.rend.prev();
+    if (dx < 0) rdTurn('next'); else rdTurn('prev');
   }, { passive: true });
 }
 // Tap the left or right edge of the page to turn it.
@@ -1680,12 +1704,12 @@ function onReaderClick(e) {
   const frame = e.view && e.view.frameElement; const box = $('#viewer').getBoundingClientRect();
   if (!frame) return;
   const x = e.clientX + frame.getBoundingClientRect().left - box.left;
-  if (x < box.width * 0.2) R.rend.prev(); else if (x > box.width * 0.8) R.rend.next();
+  if (x < box.width * 0.2) rdTurn('prev'); else if (x > box.width * 0.8) rdTurn('next');
 }
 function rdKey(e) {
   if (!R.open || $$('dialog[open]').length) return;
-  if (e.key === 'ArrowRight' || e.key === 'PageDown') R.rend && R.rend.next();
-  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') R.rend && R.rend.prev();
+  if (e.key === 'ArrowRight' || e.key === 'PageDown') rdTurn('next');
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') rdTurn('prev');
   else if (e.key === 'Escape' && e.type === 'keydown') closeReader();
 }
 function applyReaderPrefs() {
@@ -1850,10 +1874,10 @@ const ACT = {
   read: (t) => { const id = t.dataset.book; V.name = 'book'; V.bookId = id; render(); openReader(id); },
   'read-mark': (t) => { const r = store.marks[t.dataset.id]; if (r && r.cfi) openReader(r.book_id, r.cfi); },
   'rd-close': () => closeReader(),
-  'rd-prev': () => R.rend && R.rend.prev(),
-  'rd-next': () => R.rend && R.rend.next(),
+  'rd-prev': () => rdTurn('prev'),
+  'rd-next': () => rdTurn('next'),
   'rd-toc': () => openToc(),
-  'rd-toc-go': (t) => { const c = R.toc[+t.dataset.i]; closeSheets(); if (c && R.rend) R.rend.display(c.target).catch(() => toast('That chapter couldn’t be opened.')); },
+  'rd-toc-go': (t) => { const c = R.toc[+t.dataset.i]; closeSheets(); if (c && R.rend) { R.turnAt = Date.now(); R.rend.display(c.target).catch(() => toast('That chapter couldn’t be opened.')); } },
   'rd-set': () => openReaderSettings(),
   'rd-size': (t) => { const c = rdCfg(); c.size = Math.max(70, Math.min(200, c.size + 10 * +t.dataset.v)); saveConfig(); applyReaderPrefs(); renderReaderSettings(); },
   'rd-theme': (t) => { rdCfg().theme = t.dataset.v; saveConfig(); applyReaderPrefs(); renderReaderSettings(); },
@@ -1866,7 +1890,7 @@ const ACT = {
     let range; try { range = R.sel.contents.range(R.sel.cfi); } catch { range = null; }
     if (!range) { toast('That selection can’t be extended. Select it again.'); return; }
     R.ext = { range, cfi: R.sel.cfi, text: R.sel.text, contents: R.sel.contents };
-    R.sel = null; rdBot(); R.rend.next();
+    R.sel = null; rdBot(); rdTurn('next');
   },
   'rm-later': () => saveReaderMark(true),
   'rm-remove': (t) => armed('rm-' + (RM && RM.id), t, 'Tap again to remove', removeReaderMark),

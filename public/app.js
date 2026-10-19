@@ -1448,7 +1448,7 @@ function forceInk(contents, t) {
     const doc = contents.document; let st = doc.getElementById('cairn-ink');
     if (!st) { st = doc.createElement('style'); st.id = 'cairn-ink'; doc.head.appendChild(st); }
     const ink = (RD_PAGE[t] || RD_PAGE.light)[1];
-    st.textContent = `html, body, body * { color: ${ink} !important; -webkit-text-fill-color: ${ink} !important; } body a { text-decoration: underline; text-decoration-thickness: .5px; text-underline-offset: 3px; }`;
+    st.textContent = `html, body, body * { color: ${ink} !important; -webkit-text-fill-color: ${ink} !important; } body a, body a * { text-decoration: none !important; border-bottom: 0 !important; }`;
   } catch { /* frame gone */ }
 }
 // The page behind the reader (and the browser's bar) takes the reader's colour, so no light strip shows under the controls.

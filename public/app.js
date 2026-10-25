@@ -528,6 +528,10 @@ const rvText = (m) => {
   if (src.length <= 400) return src;
   const cut = src.slice(0, 400); return cut.slice(0, cut.lastIndexOf(' ')) + ' …';
 };
+// Jump from a Revisit card to the spot: the exact line in the reader for EPUBs, the book's index for everything else.
+const whereBtn = (m) => m.cfi
+  ? `<button type="button" class="btn lg block" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Open in book · ${whereLong(m)}</button>`
+  : `<button type="button" class="btn lg block" data-act="goto-mark" data-id="${esc(m.id)}">${I.book}Open in the book’s index · ${whereLong(m)}</button>`;
 function viewRevisit() {
   let h = headHtml('Revisit');
   if (!allMarks().length) return h + `<section class="empty-card"><h2>Nothing to revisit yet</h2><p>Revisit brings back a passage you marked with its key words hidden, and asks you for the idea. Add a few marks first.</p></section>`;
@@ -556,12 +560,12 @@ function viewRevisit() {
       <textarea id="rvDraft" class="rv-draft" rows="3" placeholder="The idea is…" autocomplete="off">${esc(V.rv.draft || '')}</textarea>
       <button type="button" class="btn primary lg block" data-act="rv-show">Check</button>
       <button type="button" class="btn lg block" data-act="rv-show">Skip, show me</button>
-      ${m.cfi ? `<button type="button" class="link" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Stuck? Read it in the book</button>` : ''}`;
+      ${whereBtn(m)}`;
   } else {
     const see = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
     if ((V.rv.draft || '').trim()) h += `<div class="rv-mine"><span class="lbl">You said</span><p>${esc(V.rv.draft.trim())}</p></div>`;
     h += `<div class="rv-mine"><span class="lbl">Your line</span><p class="rv-ans">${esc(m.text || '(no line yet)')}</p></div>`;
-    h += `<p class="help">${whereLong(m)}${m.chapter ? ' · ' + esc(m.chapter) : ''}</p>`;
+    h += `<p class="help">${whereLong(m)}${m.chapter ? ' · ' + esc(m.chapter) : ''}</p>${whereBtn(m)}`;
     if (see.length) h += see.map(({ l, o }) => `<div class="g-stack" style="padding:0"><span class="top"><span class="ref">${esc(shortRef(o.b))} ${refNum(o.m)}</span><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p></div>`).join('');
     h += `<p class="rv-ask">How close was your idea?</p><div class="rv-foot"><button type="button" class="btn lg miss" data-act="rv-forgot">Missed it</button><button type="button" class="btn lg" data-act="rv-fuzzy">Partly</button><button type="button" class="btn primary lg" data-act="rv-got">Got it</button></div>`;
   }

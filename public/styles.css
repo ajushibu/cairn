@@ -419,3 +419,17 @@ body.in-reader .tabbar, body.in-reader #bookBar { display: none !important; }
 .lbl-row > .lbl { padding: 0 4px; font: 700 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
 .lbl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .copy-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 4px; font-size: 15px; font-weight: 600; }
+
+/* revisit: a passage with hidden key words */
+.rv-passage { padding: 16px; border-radius: 16px; background: var(--fill); font: 400 19px/1.65 var(--serif); text-wrap: pretty; }
+.rv-blank { display: inline-block; min-width: 3ch; height: .95em; margin: 0 1px; vertical-align: -.12em; border-radius: 6px; background: var(--acc); opacity: .28; }
+.rv-fill { background: color-mix(in srgb, var(--acc) 24%, transparent); color: inherit; border-radius: 5px; padding: 0 3px; }
+.rv-draft-l { font: 700 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); padding: 0 4px; }
+.rv-draft { width: 100%; resize: vertical; min-height: 84px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--fill); color: var(--ink); font: 400 18px/1.45 var(--serif); }
+.rv-draft:focus { outline: 2px solid var(--acc); outline-offset: 1px; }
+.rv-mine { display: flex; flex-direction: column; gap: 6px; }
+.rv-mine .lbl { padding: 0 4px; font: 700 13px var(--round); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.rv-mine > p:not(.rv-ans) { padding: 12px 14px; border-radius: 14px; background: var(--fill); font: 400 17px/1.5 var(--serif); }
+.rv-ask { font: 700 15px var(--round); color: var(--ink2); text-align: center; margin-top: 4px; }
+.rv-foot { grid-template-columns: 1fr 1fr 1fr; }
+.rv-foot .btn { padding-inline: 8px; }

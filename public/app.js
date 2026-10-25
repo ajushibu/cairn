@@ -493,9 +493,44 @@ function viewAskAi() {
   return h + `</div>`;
 }
 
+/* revisit: the passage comes back with its key words hidden. Say the idea in your own words, then check. */
+const RV_STOP = new Set('about above after again against almost already also although always among another because before being below between both cannot could does doing during each either enough even every first from further having here however into itself just least less like made make many might more most much must never next once only other over own same several should since some still such than that their them then there these they this those though through thus under until upon very were what when where whether which while whom whose will with within without would your yours'.split(' '));
+function hashStr(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+// Splits text into pieces; some are "hidden": numbers and the longer, less common words. Which ones change a little each time.
+function cloze(text, seed) {
+  const re = /[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ'’-]*|\d[\d,.]*/g;
+  const words = []; let m;
+  while ((m = re.exec(text))) words.push({ w: m[0], i: m.index });
+  const cand = []; const seen = new Set();
+  words.forEach((x, k) => {
+    const lw = x.w.toLowerCase(); if (seen.has(lw)) return;
+    const num = /^\d/.test(x.w);
+    if (!num && (x.w.length < 6 || STOP.has(lw) || RV_STOP.has(lw))) return;
+    seen.add(lw);
+    cand.push({ k, score: (num ? 9 : x.w.length) + ((hashStr(seed + lw) % 100) / 50) });
+  });
+  const want = Math.max(2, Math.min(6, Math.round(words.length / 11)));
+  const pick = new Set(cand.sort((x, y) => y.score - x.score).slice(0, want).map((x) => x.k));
+  const parts = []; let at = 0;
+  words.forEach((x, k) => {
+    if (!pick.has(k)) return;
+    if (x.i > at) parts.push({ t: text.slice(at, x.i) });
+    parts.push({ t: x.w, hide: true }); at = x.i + x.w.length;
+  });
+  if (at < text.length) parts.push({ t: text.slice(at) });
+  return parts;
+}
+function clozeHtml(parts, reveal) {
+  return parts.map((x) => !x.hide ? esc(x.t) : reveal ? `<mark class="rv-fill">${esc(x.t)}</mark>` : `<span class="rv-blank" style="width:${Math.max(3, Math.min(12, x.t.length))}ch" aria-label="hidden word"></span>`).join('');
+}
+const rvText = (m) => {
+  const src = (m.quote || m.text || '').replace(/\s+/g, ' ').trim();
+  if (src.length <= 400) return src;
+  const cut = src.slice(0, 400); return cut.slice(0, cut.lastIndexOf(' ')) + ' …';
+};
 function viewRevisit() {
   let h = headHtml('Revisit');
-  if (!allMarks().length) return h + `<section class="empty-card"><h2>Nothing to revisit yet</h2><p>Revisit shows you a page number and asks what you marked there. Add a few marks first.</p></section>`;
+  if (!allMarks().length) return h + `<section class="empty-card"><h2>Nothing to revisit yet</h2><p>Revisit brings back a passage you marked with its key words hidden, and asks you for the idea. Add a few marks first.</p></section>`;
   const due = dueList();
   let cur = V.rv.id ? findMark(V.rv.id) : null;
   if (!V.rv.started || (!cur && !due.length)) {
@@ -503,24 +538,32 @@ function viewRevisit() {
     const frac = n + done ? done / (n + done) : 1;
     const next = !n ? allMarks().sort((x, y) => dueAt(x.m) - dueAt(y.m))[0] : null;
     h += `<section class="rv-home"><div class="ring-wrap">${ring(156, 13, frac)}<div class="ring-center">${n ? `<strong>${n}</strong><span>to recall</span>` : `<span style="color:var(--acc);margin:0">${I.check}</span>`}</div></div>
-      <h2 class="rv-headline">${n ? plural(n, 'page') + ' to recall' : 'All caught up'}</h2>
-      <p class="rv-sub">${n ? 'You’ll see a book and a page or location. Recall what you marked there before you look.' : `Next up: ${whereLong(next.m)} of ${esc(next.b.title)}, ${relDays(dueAt(next.m))}.`}</p>
-      <div class="rv-actions">${n ? `<button type="button" class="btn primary lg block" data-act="rv-start">Start</button>` : `<button type="button" class="btn lg block" data-act="rv-practice">Practice a random page</button>`}</div></section>`;
+      <h2 class="rv-headline">${n ? plural(n, 'idea') + ' to recall' : 'All caught up'}</h2>
+      <p class="rv-sub">${n ? 'You’ll see a passage you marked with its key words hidden. Say the idea in your own words, then check it against your line.' : `Next up: ${esc(next.b.title)}, ${relDays(dueAt(next.m))}.`}</p>
+      <div class="rv-actions">${n ? `<button type="button" class="btn primary lg block" data-act="rv-start">Start</button>` : `<button type="button" class="btn lg block" data-act="rv-practice">Practice a random idea</button>`}</div></section>`;
     return h;
   }
-  if (!cur) { V.rv.id = due[0].m.id; V.rv.shown = false; cur = due[0]; }
+  if (!cur) { V.rv.id = due[0].m.id; V.rv.shown = false; V.rv.draft = ''; cur = due[0]; }
   const { m, b } = cur;
+  const parts = cloze(rvText(m), m.id + ':' + (m.rev?.n || 0));
+  const hasQuote = !!m.quote;
   h += `<section class="rv-card" data-acc style="${accStyle(b.color)}">
-    <p class="rv-src">${esc(b.title)}${due.length ? ' · ' + due.length + ' left' : ''}</p>
-    <h2 class="rv-q">What did you mark ${m.page != null ? 'on' : 'at'} <em>${whereLong(m)}</em>?</h2>`;
+    <p class="rv-src">${esc(b.title)}${m.chapter ? ' · ' + esc(m.chapter) : ''}${due.length ? ' · ' + due.length + ' left' : ''}</p>
+    <h2 class="rv-q">${hasQuote ? 'What’s the idea in this passage?' : 'What was the idea here?'}</h2>
+    <p class="rv-passage">${clozeHtml(parts, V.rv.shown)}</p>`;
   if (!V.rv.shown) {
-    h += `<button type="button" class="btn tinted lg block" data-act="rv-show">Show my note</button>${m.cfi ? `<button type="button" class="btn lg block" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Not sure? Open the book there</button>` : `<p class="help">Not sure? Open the book to ${whereLong(m)} first.</p>`}`;
+    h += `<label class="rv-draft-l" for="rvDraft">In your own words</label>
+      <textarea id="rvDraft" class="rv-draft" rows="3" placeholder="The idea is…" autocomplete="off">${esc(V.rv.draft || '')}</textarea>
+      <button type="button" class="btn primary lg block" data-act="rv-show">Check</button>
+      <button type="button" class="btn lg block" data-act="rv-show">Skip, show me</button>
+      ${m.cfi ? `<button type="button" class="link" data-act="read-mark" data-id="${esc(m.id)}">${I.book}Stuck? Read it in the book</button>` : ''}`;
   } else {
     const see = linksOf(m.id).map(({ l, other }) => ({ l, o: findMark(other) })).filter((x) => x.o);
-    h += `<p class="rv-ans">${esc(m.text)}</p>`;
-    if (m.quote) h += `<p class="quote clamp">${esc(m.quote)}</p>`;
+    if ((V.rv.draft || '').trim()) h += `<div class="rv-mine"><span class="lbl">You said</span><p>${esc(V.rv.draft.trim())}</p></div>`;
+    h += `<div class="rv-mine"><span class="lbl">Your line</span><p class="rv-ans">${esc(m.text || '(no line yet)')}</p></div>`;
+    h += `<p class="help">${whereLong(m)}${m.chapter ? ' · ' + esc(m.chapter) : ''}</p>`;
     if (see.length) h += see.map(({ l, o }) => `<div class="g-stack" style="padding:0"><span class="top"><span class="ref">${esc(shortRef(o.b))} ${refNum(o.m)}</span><span class="lt">${esc(o.m.text)}</span></span><p class="because">Because: ${esc(l.because)}</p></div>`).join('');
-    h += `<div class="rv-foot"><button type="button" class="btn lg miss" data-act="rv-forgot">Forgot</button><button type="button" class="btn primary lg" data-act="rv-got">Remembered</button></div>`;
+    h += `<p class="rv-ask">How close was your idea?</p><div class="rv-foot"><button type="button" class="btn lg miss" data-act="rv-forgot">Missed it</button><button type="button" class="btn lg" data-act="rv-fuzzy">Partly</button><button type="button" class="btn primary lg" data-act="rv-got">Got it</button></div>`;
   }
   return h + `</section>`;
 }
@@ -615,7 +658,7 @@ function nudges() {
   if (reading) out.push({ k: 'Keep reading', t: `${reading.title}, ${Math.round(reading.lastPct * 100)}% in`, d: 'Pick up where you left off. Select a line when something matters.', btn: `<button type="button" class="btn tinted" data-act="read" data-book="${esc(reading.id)}">Continue</button>` });
   if (S.inbox.length) out.push({ k: 'Inbox', t: `${plural(S.inbox.length, 'highlight')} waiting`, d: 'Give each one a line in your own words, or skip it.', btn: actionButton(['go:inbox', 'Review']) });
   const due = dueList().length;
-  if (due) out.push({ k: 'Revisit', t: `${plural(due, 'page')} to recall today`, d: 'A few seconds each. Recall first, then look.', btn: actionButton(['go:revisit', 'Start']) });
+  if (due) out.push({ k: 'Revisit', t: `${plural(due, 'idea')} to recall today`, d: 'A passage with its key words hidden. Say the idea in your own words first.', btn: actionButton(['go:revisit', 'Start']) });
   const last = marks.reduce((t, x) => Math.max(t, x.m.at), 0);
   if (last && now - last > 7 * DAY) {
     const lb = marks.find((x) => x.m.at === last).b;
@@ -683,7 +726,7 @@ function render() {
 function go(name) {
   closeSheets();
   V.name = name;
-  if (name === 'revisit') V.rv = { id: null, shown: false, done: 0, started: false };
+  if (name === 'revisit') V.rv = { id: null, shown: false, draft: '', done: 0, started: false };
   if (name === 'inbox') V.inboxShow = 30;
   render();
   if (!V.flash) window.scrollTo(0, 0);
@@ -975,14 +1018,15 @@ async function askAi() {
 
 /* revisit: pass → 3 days → 7 → growing; miss → tomorrow (recall's steps) */
 function grade(ok) {
+  // ok: true = got it, false = missed it, 'part' = partly (stays on the same step, back in 3 days)
   const rec = store.marks[V.rv.id]; if (!rec) return;
-  const n = ok ? (rec.rev_n || 0) + 1 : 0;
-  const days = ok ? STEPS[Math.min(n, STEPS.length - 1)] : 1;
+  const n = ok === true ? (rec.rev_n || 0) + 1 : ok === 'part' ? (rec.rev_n || 0) : 0;
+  const days = ok === true ? STEPS[Math.min(n, STEPS.length - 1)] : ok === 'part' ? 3 : 1;
   Object.assign(rec, { rev_n: n, rev_due: isoAt(Date.now() + days * DAY), rev_last: nowISO() }); touch(rec);
   changed();
-  V.rv.id = null; V.rv.shown = false; V.rv.done += 1;
+  V.rv.id = null; V.rv.shown = false; V.rv.draft = ''; V.rv.done += 1;
   render(); window.scrollTo(0, 0);
-  toast(ok ? `Next look in ${plural(days, 'day')}` : 'You’ll see it again tomorrow');
+  toast(ok === false ? 'You’ll see it again tomorrow' : `Next look in ${plural(days, 'day')}`);
 }
 
 /* ───────────── import: EPUB files and Kindle highlights ───────────── */
@@ -1881,7 +1925,8 @@ const ACT = {
   'rv-show': () => { V.rv.shown = true; render(); },
   'rv-got': () => grade(true),
   'rv-forgot': () => grade(false),
-  'rv-practice': () => { const all = allMarks(); const p = all[Math.floor(Math.random() * all.length)]; V.rv = { ...V.rv, id: p.m.id, shown: false, started: true }; render(); },
+  'rv-fuzzy': () => grade('part'),
+  'rv-practice': () => { const all = allMarks(); const p = all[Math.floor(Math.random() * all.length)]; V.rv = { ...V.rv, id: p.m.id, shown: false, draft: '', started: true }; render(); },
   import: (t) => openImport(t.dataset.book, t.dataset.mode),
   read: (t) => { const id = t.dataset.book; V.name = 'book'; V.bookId = id; render(); openReader(id); },
   'read-mark': (t) => { const r = store.marks[t.dataset.id]; if (r && r.cfi) openReader(r.book_id, r.cfi); },
@@ -1963,6 +2008,7 @@ function wire() {
     if (t.id === 'linkQ') { LK.q = t.value; $('#linkList').innerHTML = pickerItems(); }
     else if (t.id === 'linkBecause') { LK.because = t.value; $('#linkErr').textContent = ''; updateLinkSave(); }
     else if (t.id === 'askQ') V.ask.q = t.value;
+    else if (t.id === 'rvDraft') V.rv.draft = t.value;
     else if (t.dataset && t.dataset.ib) {
       const rec = store.marks[t.dataset.ib];
       if (rec) {
@@ -2014,6 +2060,6 @@ async function init() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-window.Cairn = { openDetail, get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
+window.Cairn = { openDetail, derive, render, get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
 init();
 })();

@@ -14,7 +14,7 @@ Same family as margin and recall.
 - **Next.js 15 on Vercel**, used only for a few API routes. The app itself is a plain page in `public/` (no React, no build step for the UI). Same setup as margin and recall.
 - **Supabase**: Postgres plus Auth and Storage. Shares margin's project and login, like recall. Cairn's tables (`cairn_books`, `cairn_marks`, `cairn_links`) and its private `cairn-books` storage bucket don't touch margin's or recall's.
 - **EPUB reader**: [epub.js](https://github.com/futurepress/epub.js) 0.3.93 with JSZip 3.10.1, pinned in `public/vendor/`. Books render in a sandboxed frame with scripts off.
-- **Claude**: called from `app/api/suggest`, `app/api/ask`, `app/api/kindle` and `app/api/draft`. The key stays on the server and only `ALLOWED_EMAIL` can use it.
+- **Claude**: called from `app/api/suggest`, `app/api/ask`, `app/api/kindle` and `app/api/draft`. `app/api/koreader` reads your Kindle's highlight files from your cloud folder; it doesn't call Claude. The key stays on the server and only `ALLOWED_EMAIL` can use it.
 - **Offline**: a service worker caches the app; your shelf lives in local storage and syncs when you're back online.
 
 ## Project layout
@@ -74,6 +74,10 @@ docs/screens/             screenshots
 | `CLAUDE_MODEL` | Optional. Answers Look deeper and reads Kindle photos. Defaults to `claude-sonnet-5-5`. |
 | `CLAUDE_QUICK_MODEL` | Optional. Suggests matches for links and drafts lines for imported highlights. Defaults to `claude-haiku-5-5`. |
 | `CLAUDE_EFFORT` | Optional. `low` (default), `medium`, `high` or `off`. |
+| `PCLOUD_AUTH` | Optional. Kindle sync: a pCloud access token you make yourself (see Kindle sync). Never your password. |
+| `PCLOUD_FOLDER` | Optional. Kindle sync: the pCloud folder KOReader saves highlights to, e.g. `/KOReader/highlights`. |
+| `PCLOUD_HOST` | Optional. `api.pcloud.com` (default, US) or `eapi.pcloud.com` (Europe). |
+| `KOREADER_WEBDAV_URL`, `KOREADER_WEBDAV_USER`, `KOREADER_WEBDAV_PASS` | Optional. Kindle sync from any WebDAV folder instead of the pCloud API. The URL must be `https://`. |
 
 ## How it works
 - **Mark**: page number plus one line in your own words. Enter moves from the page to the line; Enter again saves. Tap Mark in the tab bar from anywhere, or **Mark page** inside a book.
@@ -107,6 +111,22 @@ Books can be **Paper** or **Kindle** (set it when you add or edit a book). Kindl
 - **Clippings file** (whole books, free, exact): connect the Kindle e-reader to your computer with its USB cable, open the **Kindle** drive → `documents` → `My Clippings.txt`, and choose that file. It's read on your device with no AI. Cairn lists the books in it with how many highlights are new; tick the ones you want. Highlights you later extended are merged, your Kindle notes are attached to the highlight they belong to and become its line, and importing the same file again only adds what's new. The notebook export from the Kindle app (an `.html` file it emails you) works too. English-language Kindles only for now.
 - **Photos of pages** (a few pages, uses Claude): photograph the e-reader screen straight on, with the footer showing. Pick the book (or make a new one) and choose up to 20 photos. They're shrunk on your phone and sent four at a time; Claude copies out your own highlights (it ignores Popular Highlights, the dotted ones), reads the location or page from the footer, and drafts a line for each.
 - **Inbox**: imported highlights land here, not in your index. Each card shows the quote and a line: your Kindle note, Claude's draft (tagged *Claude's draft. Make it yours.* until you change it), or empty. **Draft lines** has Claude fill in up to 25 empty ones at a time. **Keep** moves a highlight into the book's index; **Skip** drops it (with Undo). The quote stays with the mark and shows in the mark sheet, Ask and Revisit, and in the Markdown export.
+
+## Kindle sync (KOReader)
+Highlights made on a Kindle running [KOReader](https://koreader.rocks/) with the HighlightSync plugin reach Cairn without any steps from you:
+
+1. KOReader saves one `.json` file per book to your cloud folder whenever the Kindle is online.
+2. Each time Cairn opens or syncs (and at most every 4 minutes), it asks `/api/koreader` to read that folder. The server reads only the files that changed since the last check.
+3. New highlights land in the **Inbox**, with the book on your shelf (made if it isn't there). Write your line and tap Keep, and the mark works like any other: revisit, links, Ask.
+4. A highlight you **Skip** never comes back, and highlights already in the book are never added twice. The file's page numbers are KOReader's own and change with the font size, so rely on the passage and your line.
+
+**Set up (once)**
+1. In pCloud, note the folder KOReader saves to (the HighlightSync plugin's folder setting).
+2. Make a token. In your own browser, open `https://api.pcloud.com/userinfo?getauth=1&logout=1&username=YOUR_EMAIL&password=YOUR_PASSWORD&authexpire=31536000&authinactiveexpire=31536000` and copy the `auth` value from the reply. (A European account uses `eapi.pcloud.com` here and as `PCLOUD_HOST`.) Clear that page from your history afterwards.
+3. In Vercel → your cairn project → Settings → Environment Variables, add `PCLOUD_AUTH` (the token), `PCLOUD_FOLDER` and, for a European account, `PCLOUD_HOST`. Redeploy.
+4. Open Cairn, then **More → Check my Kindle now**.
+
+If it says the login was not accepted, the token has expired: make a new one and update `PCLOUD_AUTH`. Not on pCloud? Any WebDAV folder works through `KOREADER_WEBDAV_*`. Cairn never stores your Amazon login, and the token only lives in your Vercel settings.
 
 ## Cost
 Reading EPUBs and marking them costs nothing; book files use Supabase Storage (1 GB on the free plan, so a few hundred typical EPUBs). Suggest matches, Look deeper, Draft lines and reading photos are all buttons, so nothing is sent or billed unless you tap one. The clippings file costs nothing. Look deeper sends every mark: 300 marks is roughly 8,000 tokens in and a few hundred out, which is about 2–3 US cents at Sonnet-class prices of about $3 / $15 per million tokens. Suggest matches and Draft lines use the smaller Haiku model and cost less. A photo is shrunk to about 1,500 × 1,100 pixels before it's sent, roughly 1,600 tokens, so reading one costs on the order of half a cent to a cent. Check Anthropic's pricing page for current numbers. Supabase and Vercel free tiers cover the rest.

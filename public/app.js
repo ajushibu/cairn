@@ -180,7 +180,11 @@ const API_ERRORS = {
   overloaded: 'Claude is overloaded right now. Try again in a minute.',
   bad_model: 'The model name set in Vercel doesn’t exist.',
   bad_reply: 'Claude’s answer couldn’t be read. Try again.',
-  bad_request: 'That request was empty or too large. Try fewer photos at a time.'
+  bad_request: 'That request was empty or too large. Try fewer photos at a time.',
+  not_set_up: 'Kindle sync isn’t set up on this server yet.',
+  auth_failed: 'Your cloud folder didn’t accept the saved login. Make a new token and update it in Vercel.',
+  folder_missing: 'Cairn couldn’t find the highlights folder. Check the folder name in Vercel.',
+  storage_error: 'Cairn couldn’t read your cloud folder just now.'
 };
 const aiOn = () => !!(sb && user);
 async function api(path, payload, signal) {
@@ -197,7 +201,7 @@ async function api(path, payload, signal) {
   }
   if (res.status === 413) throw new Error(API_ERRORS.bad_request);
   const j = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(API_ERRORS[j.error] || `Claude couldn’t answer (${j.error || res.status}). Try again.`);
+  if (!res.ok) { const err = new Error(API_ERRORS[j.error] || `Claude couldn’t answer (${j.error || res.status}). Try again.`); err.code = j.error; throw err; }
   return j;
 }
 const noteFor = ({ m, b }) => ({ id: m.id, book: b.title, author: b.author, page: m.page, loc: m.loc, chapter: m.chapter || '', text: m.text, quote: m.quote ? m.quote.slice(0, 600) : '' });
@@ -274,6 +278,7 @@ async function syncNow() {
     setSync('ok', 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     queueRender();
     uploadPending();
+    setTimeout(() => koPull(false), 600);
   } catch (e) {
     console.error(e);
     setSync('err', 'Sync error');
@@ -1097,7 +1102,7 @@ async function shrink(file) {
 }
 function existingKeys(bookId) {
   const keys = new Set();
-  for (const r of Object.values(store.marks)) if (!r.deleted && r.book_id === bookId) { if (r.quote) keys.add(quoteKey(r.quote)); else keys.add('n:' + quoteKey(r.text)); }
+  for (const r of Object.values(store.marks)) if ((!r.deleted || /^(koreader|kindle)/.test(r.source || '')) && r.book_id === bookId) { if (r.quote) keys.add(quoteKey(r.quote)); else keys.add('n:' + quoteKey(r.text)); }
   return keys;
 }
 async function readPhotos() {
@@ -1254,22 +1259,56 @@ async function readClipFile(files) {
   } catch (e) { IM.err = 'That file couldn’t be read. Choose My Clippings.txt from the Kindle’s documents folder, or the highlights files KOReader saves.'; }
   renderImport();
 }
-function addParsed() {
-  const P = IM.parsed; if (!P) return;
+// Puts highlights into the Inbox, making the book first if it isn't on the shelf. Used by every Kindle import.
+function importBooks(books, source) {
   let added = 0, booksMade = 0;
-  for (const b of P.books) {
-    if (!IM.pick.has(b.key) || !b.fresh.length) continue;
+  for (const b of books) {
+    if (!b.fresh.length) continue;
     let bookId = b.existing && b.existing.id;
     if (!bookId) { bookId = addBook({ title: b.title, author: b.author, kind: b.kind || 'kindle' }).id; booksMade++; }
     for (const it of b.fresh) {
-      addMark(bookId, { page: it.page, loc: it.loc, quote: it.quote, text: it.note || '', status: 'inbox', source: P.source, created: it.at || undefined });
+      addMark(bookId, { page: it.page, loc: it.loc, quote: it.quote, text: it.note || '', status: 'inbox', source, created: it.at || undefined });
       added++;
     }
     bump(bookId);
   }
+  return { added, booksMade };
+}
+function addParsed() {
+  const P = IM.parsed; if (!P) return;
+  const { added, booksMade } = importBooks(P.books.filter((b) => IM.pick.has(b.key)), P.source);
   changed(); closeSheets(); go('inbox');
   toast(`${plural(added, 'highlight')} in your inbox${booksMade ? `, ${plural(booksMade, 'new book')} on your shelf` : ''}.`, 6000);
 }
+
+/* Kindle sync: KOReader on the Kindle saves highlights to your cloud folder; Cairn reads that folder (through /api/koreader)
+   whenever it opens or syncs, and adds anything new to the Inbox. */
+const ko = { busy: false, state: 'idle', msg: '' };
+async function koPull(manual) {
+  if (ko.busy || !aiOn() || !navigator.onLine) { if (manual && !aiOn()) toast('Sign in first.'); return; }
+  if (!manual && (ko.state === 'unset' || Date.now() - (config.koAt || 0) < 4 * 60000)) return;
+  ko.busy = true; if (manual) { ko.state = 'busy'; ko.msg = 'Checking…'; if ($('#sheetMenu').open) renderMenu(); }
+  try {
+    const r = await api('/api/koreader', { since: config.koSince || 0 });
+    const raw = (r.books || []).map((b) => ({ key: titleKey(b.title), title: b.title, author: b.author, kind: 'paper', notes: [],
+      hl: (b.hl || []).map((h) => ({ page: h.page ?? null, loc: null, locEnd: null, text: h.text, at: h.at || null, note: h.note || '' })) }));
+    const merged = new Map();
+    for (const b of raw) { const e = merged.get(b.key); if (e) e.hl.push(...b.hl); else merged.set(b.key, b); }
+    const parsed = finishParsed([...merged.values()], 'koreader');
+    const { added } = importBooks(parsed.books, 'koreader');
+    config.koSince = r.latest ? r.latest - 1000 : config.koSince; config.koAt = Date.now(); saveConfig();
+    ko.state = 'ok'; ko.msg = added ? `${plural(added, 'new highlight')} just added` : 'Up to date';
+    if (added) { changed(); queueRender(); toast(`${plural(added, 'new highlight')} from your Kindle`, { label: 'Review', act: () => go('inbox') }); }
+    else if (manual) toast('Nothing new on your Kindle yet.');
+  } catch (e) {
+    if (e.code === 'not_set_up') { ko.state = 'unset'; ko.msg = 'Not set up'; if (manual) toast(API_ERRORS.not_set_up + ' See Kindle sync in the README.', 7000); }
+    else { ko.state = 'err'; ko.msg = e.message; config.koAt = Date.now(); if (manual) toast(e.message, 7000); }
+  } finally { ko.busy = false; if ($('#sheetMenu').open) renderMenu(); }
+}
+const koStatus = () => ko.state === 'unset' ? 'Not set up yet. Steps are in the README under Kindle sync.'
+  : ko.state === 'busy' ? 'Checking…'
+  : ko.state === 'err' ? ko.msg
+  : config.koAt ? `${ko.msg || 'Up to date'} · checked ${new Date(config.koAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Checks your Kindle’s highlight folder each time Cairn opens.';
 
 /* inbox actions */
 function keepInbox(id) {
@@ -1352,6 +1391,8 @@ function renderMenu() {
     : user
       ? `<li class="g-stack"><span>Signed in as</span><span class="help">${esc(user.email || '')}</span></li>
          <li><button type="button" class="g-row acc" data-act="sync">Sync now</button></li>
+         <li class="g-stack"><span>Kindle sync</span><span class="help">${esc(koStatus())}</span></li>
+         <li><button type="button" class="g-row acc" data-act="ko-pull">Check my Kindle now</button></li>
          <li><button type="button" class="g-row danger" data-act="signout">Sign out</button></li>`
       : `<li><button type="button" class="g-row acc" data-act="signin">Sign in<span class="val">Same account as margin</span></button></li>`;
   const t = config.theme || 'system', ti = ['system', 'light', 'dark'].indexOf(t);
@@ -2009,6 +2050,7 @@ const ACT = {
   signin: () => openAuth(),
   signout: async () => { if (sb) await sb.auth.signOut(); closeSheets(); toast('Signed out. Your shelf stays on this device.'); },
   sync: () => syncNow(),
+  'ko-pull': () => koPull(true),
   theme: (t) => { config.theme = t.dataset.v; saveConfig(); applyTheme(); renderMenu(); if (R.open) applyReaderPrefs(); },
   'export-md': () => exportMd(),
   'export-json': () => exportJson(),
@@ -2104,6 +2146,6 @@ async function init() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-window.Cairn = { openDetail, derive, render, get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
+window.Cairn = { setKoSince: (n) => { config.koSince = n; config.koAt = 0; }, openDetail, derive, render, get store() { return store; }, get S() { return S; }, get R() { return R; }, syncNow, search, parseClippings, parseNotebookHtml };
 init();
 })();

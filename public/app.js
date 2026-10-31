@@ -1065,8 +1065,8 @@ function renderImport() {
     if (!aiOn()) h += sb ? `<div class="think"><span>Reading photos needs Claude. Sign in with your margin account first.</span><button type="button" class="btn tinted" data-act="signin">Sign in</button></div>` : `<p class="help">Reading photos needs Claude, which isn’t set up on this server. The clippings file works without it.</p>`;
     h += `<button type="button" class="btn primary lg block" data-act="im-read"${!IM.files.length || IM.busy || !aiOn() ? ' disabled' : ''}>${I.spark}${IM.busy ? 'Reading…' : 'Read highlights'}</button>`;
   } else {
-    h += `<label class="drop" for="clipInput"><span class="ic">${I.file}</span><span><b>${IM.parsed ? esc(IM.parsed.name) : 'Choose My Clippings.txt'}</b><small>${IM.parsed ? 'Tap to choose a different file' : 'Or the notebook export (.html) from the Kindle app'}</small></span></label>
-      <p class="help">Connect your Kindle to your computer with its USB cable. It shows up as a drive named Kindle: open <b>documents</b> and choose <b>My Clippings.txt</b>. This is read on your device with no AI, so it’s free and exact. Your own Kindle notes become your lines.</p>`;
+    h += `<label class="drop" for="clipInput"><span class="ic">${I.file}</span><span><b>${IM.parsed ? esc(IM.parsed.name) : 'Choose My Clippings.txt'}</b><small>${IM.parsed ? 'Tap to choose a different file' : 'Or the notebook export (.html), or KOReader’s highlight files (.json)'}</small></span></label>
+      <p class="help">Connect your Kindle to your computer with its USB cable. It shows up as a drive named Kindle: open <b>documents</b> and choose <b>My Clippings.txt</b>. This is read on your device with no AI, so it’s free and exact. Your own Kindle notes become your lines. Using KOReader? Choose its highlight files (one .json per book, in the folder HighlightSync saves to); you can choose several at once. KOReader’s page numbers change with your font size.</p>`;
     if (IM.err) h += `<p class="err-msg">${esc(IM.err)}</p>`;
     if (IM.parsed) {
       const books = IM.parsed.books;
@@ -1183,6 +1183,34 @@ function parseNotebookHtml(html) {
   }
   return finishParsed([b], 'kindle-export');
 }
+// KOReader (on a Kindle or other e-reader) with the HighlightSync plugin: one JSON file per book,
+// "Title - Author.sdr-….json", holding a list of highlights. The book isn't named inside the file, so it comes from the file name.
+function koBookFromName(name) {
+  let n = String(name || '').replace(/\.json$/i, '').replace(/\.sdr[-_\d]*$/i, '').replace(/_/g, ' ').trim();
+  let title = n, author = '';
+  const cut = n.lastIndexOf(' - ');
+  if (cut > 0) { title = n.slice(0, cut).trim(); author = n.slice(cut + 3).trim(); }
+  const art = title.match(/^(.*?),?\s{2,}(The|A|An)$/i);           // "River of Doubt  The" was "River of Doubt, The"
+  title = (art ? `${art[2]} ${art[1]}` : title).replace(/\s+/g, ' ').trim();
+  return { title: title || 'Untitled', author: author.replace(/\s+/g, ' ') };
+}
+function koRaw(text, name) {
+  let j; try { j = JSON.parse(text.replace(/^﻿/, '')); } catch { return null; }
+  const list = Array.isArray(j) ? j : Array.isArray(j?.highlights) ? j.highlights : null;
+  if (!list || !list.some((h) => h && typeof h.text === 'string' && (h.pos0 || h.pageno || h.datetime))) return null;
+  const { title, author } = koBookFromName(name);
+  // While a highlight is being dragged the plugin can save the shorter versions first. Keep the longest one per start point.
+  const byStart = new Map();
+  for (const h of list) {
+    const t = String(h?.text || '').replace(/\s+/g, ' ').trim(); if (!t) continue;
+    const k = String(h.pos0 || t.slice(0, 40));
+    const prev = byStart.get(k);
+    if (!prev || t.length > prev.text.length) byStart.set(k, { text: t, page: Number.isFinite(+h.pageno) && +h.pageno > 0 ? Math.round(+h.pageno) : null,
+      at: Date.parse(String(h.datetime || '').replace(' ', 'T')) || null, note: String(h.note || '').replace(/\s+/g, ' ').trim(), chapter: String(h.chapter || '') });
+  }
+  const hl = [...byStart.values()].map((x) => ({ page: x.page, loc: null, locEnd: null, text: x.text, at: Number.isFinite(x.at) ? x.at : null, note: x.note }));
+  return { key: titleKey(title), title, author, kind: 'paper', hl, notes: [] };
+}
 // Highlights you extended appear twice; keep the later one. Notes attach to the highlight they sit on.
 function finishParsed(raw, source) {
   const books = raw.map((b) => {
@@ -1192,7 +1220,7 @@ function finishParsed(raw, source) {
         (x.text.includes(h.text.slice(0, 30)) || h.text.includes(x.text.slice(0, 30))));
       if (i >= 0) hl[i] = h; else hl.push(h);
     }
-    const items = hl.map((h) => ({ page: h.page, loc: h.loc, quote: h.text, note: '', at: h.at }));
+    const items = hl.map((h) => ({ page: h.page, loc: h.loc, quote: h.text, note: h.note || '', at: h.at }));
     for (const n of b.notes) {
       const host = items.find((it, i) => i < hl.length && !it.note && hl[i].loc != null && n.loc != null && hl[i].loc <= n.loc && n.loc <= hl[i].locEnd);
       if (host) host.note = n.text; else items.push({ page: n.page, loc: n.loc, quote: null, note: n.text, at: n.at });
@@ -1200,18 +1228,30 @@ function finishParsed(raw, source) {
     const existing = S.books.find((x) => titleKey(x.title) === b.key) || null;
     const seen = existing ? existingKeys(existing.id) : new Set();
     const fresh = items.filter((it) => { const k = it.quote ? quoteKey(it.quote) : 'n:' + quoteKey(it.note); if (seen.has(k)) return false; seen.add(k); return true; });
-    return { key: b.key, title: b.title, author: b.author, items, fresh, existing };
+    return { key: b.key, title: b.title, author: b.author, kind: b.kind || 'kindle', items, fresh, existing };
   }).filter((b) => b.items.length).sort((a, b) => b.fresh.length - a.fresh.length);
   return { source, books };
 }
-async function readClipFile(file) {
-  IM.err = ''; IM.parsed = null;
+async function readClipFile(files) {
+  files = [].concat(files); IM.err = ''; IM.parsed = null;
   try {
-    const text = await file.text();
-    const parsed = /<html|class=["']?noteText/i.test(text) ? parseNotebookHtml(text) : parseClippings(text);
-    IM.parsed = { name: file.name, ...parsed };
+    const raws = []; let source = 'kindle-clippings', other = null;
+    for (const file of files) {
+      const text = await file.text();
+      const ko = koRaw(text, file.name);
+      if (ko) { raws.push(ko); source = 'koreader'; continue; }
+      if (files.length === 1) other = /<html|class=["']?noteText/i.test(text) ? parseNotebookHtml(text) : parseClippings(text);
+    }
+    let parsed;
+    if (other) parsed = other;
+    else if (raws.length) {
+      const byKey = new Map();
+      for (const r of raws) { const e = byKey.get(r.key); if (e) e.hl.push(...r.hl); else byKey.set(r.key, r); }
+      parsed = finishParsed([...byKey.values()], 'koreader');
+    } else throw new Error('unreadable');
+    IM.parsed = { name: files.length > 1 ? `${files.length} files` : files[0].name, ...parsed };
     IM.pick = new Set(parsed.books.filter((b) => b.fresh.length).map((b) => b.key));
-  } catch (e) { IM.err = 'That file couldn’t be read. Choose My Clippings.txt from the Kindle’s documents folder.'; }
+  } catch (e) { IM.err = 'That file couldn’t be read. Choose My Clippings.txt from the Kindle’s documents folder, or the highlights files KOReader saves.'; }
   renderImport();
 }
 function addParsed() {
@@ -1220,7 +1260,7 @@ function addParsed() {
   for (const b of P.books) {
     if (!IM.pick.has(b.key) || !b.fresh.length) continue;
     let bookId = b.existing && b.existing.id;
-    if (!bookId) { bookId = addBook({ title: b.title, author: b.author, kind: 'kindle' }).id; booksMade++; }
+    if (!bookId) { bookId = addBook({ title: b.title, author: b.author, kind: b.kind || 'kindle' }).id; booksMade++; }
     for (const it of b.fresh) {
       addMark(bookId, { page: it.page, loc: it.loc, quote: it.quote, text: it.note || '', status: 'inbox', source: P.source, created: it.at || undefined });
       added++;
@@ -2003,7 +2043,7 @@ function wire() {
     if (t.name === 'markBook') renderMarkUnit();
     else if (t.name === 'imBook') { IM.title = ($('#imTitle') || {}).value || IM.title; IM.author = ($('#imAuthor') || {}).value || IM.author; IM.bookId = t.value; renderImport(); }
     else if (t.id === 'photoInput') { IM.files = [...t.files].slice(0, 20); IM.err = t.files.length > 20 ? 'Only the first 20 photos are used. Import the rest next.' : ''; t.value = ''; renderImport(); }
-    else if (t.id === 'clipInput') { const f = t.files[0]; t.value = ''; if (f) readClipFile(f); }
+    else if (t.id === 'clipInput') { const fs = [...t.files]; t.value = ''; if (fs.length) readClipFile(fs); }
     else if (t.id === 'epubInput') { const f = t.files[0]; t.value = ''; if (f) importEpub(f); }
     else if (t.dataset && t.dataset.pick) { if (t.checked) IM.pick.add(t.dataset.pick); else IM.pick.delete(t.dataset.pick); renderImport(); }
   });

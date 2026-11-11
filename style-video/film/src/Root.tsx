@@ -1,6 +1,10 @@
 import React from 'react';
 import {Composition} from 'remotion';
 import {Scene} from './Scene';
+import {Storyboard, STRIP_W, STRIP_H} from './Storyboard';
 export const Root: React.FC = () => (
-  <Composition id="Workshop" component={Scene} durationInFrames={150} fps={30} width={1080} height={1920} />
+  <>
+    <Composition id="Workshop" component={Scene} durationInFrames={150} fps={30} width={1080} height={1920} />
+    <Composition id="Storyboard" component={Storyboard} durationInFrames={1} fps={30} width={STRIP_W} height={STRIP_H} />
+  </>
 );

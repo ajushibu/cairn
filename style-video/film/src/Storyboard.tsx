@@ -242,9 +242,18 @@ const Box: React.FC<{c: P; i: number; pre: string; L: Light}> = ({c, i, pre, L})
 };
 
 // ---------------- one panel ----------------
-type PanelSpec = {n: number; cam: [number, number, number]; pose: Pose; L: Light; count: number; lampOn: boolean};
+export type Anim = {t: number; ph: number; feed: number; tally: number; boxes: number; fly?: {i: number; p: number}; armBlend: number; legBlend: number};
+export type PanelSpec = {n: number; cam: [number, number, number]; pose: Pose; L: Light; count: number; lampOn: boolean; anim?: Anim};
+export {WARM, NIGHT};
+export type {Pose, Light};
 
-const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
+export const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn, anim}) => {
+  const ph = anim ? anim.ph : 0;
+  const bob = 0.5 + 0.5 * Math.sin(ph);
+  const feed = anim ? anim.feed : 0;
+  const tallyN = anim ? Math.floor(anim.tally) : count;
+  const tallyP = anim ? anim.tally - tallyN : 0;
+  const landed = anim ? anim.boxes : count;
   const pre = `p${n}`;
   const [cx, cy, cw] = cam;
   const ch = (cw * 16) / 9;
@@ -264,25 +273,26 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
 
   let wN: P, wF: P, angN: number, angF: number, typeN: 'flat' | 'fist' | 'cup', typeF: 'flat' | 'fist' | 'cup', sgnN = 1, sgnF = 1;
   if (pose.arms === 'work') {
-    wN = [838, 1500]; wF = [960, 1486]; angN = -6; angF = 6; typeN = 'flat'; typeF = 'flat';
+    wN = [838 + feed, 1500]; wF = [960 + feed * 0.6, 1486]; angN = -6; angF = 6; typeN = 'flat'; typeF = 'flat';
   } else if (pose.arms === 'chin') {
     wN = add(chin, [-30, 70]); angN = -70; typeN = 'fist'; sgnN = 1;
     wF = [930, 1500]; angF = 18; typeF = 'flat';
   } else {
-    wN = add(HO, [190, -400]); angN = -64; typeN = 'flat'; sgnN = 1;
-    wF = add(HO, [-120, -390]); angF = -112; typeF = 'flat'; sgnF = -1;
+    const k = anim ? anim.armBlend : 1;
+    const mixP = (a: P, b: P): P => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+    wN = mixP([838 + feed, 1500], add(HO, [190, -400])); angN = -6 + (-58) * k; typeN = 'flat'; sgnN = 1;
+    wF = mixP([960, 1486], add(HO, [-120, -390])); angF = 6 + (-118) * k; typeF = 'flat'; sgnF = k > 0.35 ? -1 : 1;
   }
   wN = reach(sN, wN, 405); wF = reach(sF, wF, 405);
   const eN = ik(sN, wN, 210, 200, sgnN), eF = ik(sF, wF, 210, 200, sgnF);
 
   // legs
   let knee: P, foot: P, knee2: P, foot2: P;
-  if (pose.legs === 'treadle') {
-    foot = [760, 2330]; knee = ik(HIP, foot, 270, 470, -1);
-    foot2 = [700, 2340]; knee2 = ik(add(HIP, [-20, 0]), foot2, 270, 470, -1);
-  } else {
-    foot = [1010, 2050]; knee = ik(HIP, foot, 270, 470, -1);
-    foot2 = [620, 2230]; knee2 = ik(add(HIP, [-20, 0]), foot2, 270, 470, -1);
+  {
+    const lb = anim ? anim.legBlend : pose.legs === 'kick' ? 1 : 0;
+    const tr = 10 * Math.sin(ph) * (1 - lb);
+    foot = [760 + 250 * lb, 2330 - 280 * lb + tr]; knee = ik(HIP, foot, 270, 470, -1);
+    foot2 = [700 - 80 * lb, 2340 - 110 * lb - tr]; knee2 = ik(add(HIP, [-20, 0]), foot2, 270, 470, -1);
   }
 
   // lamp shade geometry
@@ -480,9 +490,10 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
       </g>
       <text x={BOARD.x + 40} y={BOARD.y + 76} fontFamily="DejaVu Serif" fontWeight={700} fontSize={44} letterSpacing={7} fill="#f7efe2" opacity={0.85} filter={`url(#${pre}chalk)`}>PAIRS</text>
       <g filter={`url(#${pre}chalk)`}>
-        {Array.from({length: count}).map((_, k) => {
+        {Array.from({length: tallyN + (tallyP > 0 ? 1 : 0)}).map((_, k) => {
           const [a, b] = tally(k);
-          return <line key={k} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="#f7efe2" strokeWidth={10} strokeLinecap="round" opacity={0.9} />;
+          const q = k < tallyN ? 1 : tallyP;
+          return <line key={k} x1={a[0]} y1={a[1]} x2={a[0] + (b[0] - a[0]) * q} y2={a[1] + (b[1] - a[1]) * q} stroke="#f7efe2" strokeWidth={10} strokeLinecap="round" opacity={0.9} />;
         })}
       </g>
 
@@ -512,7 +523,7 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
         <path d={`M1248 1590 L1282 1590 L1300 ${FLOOR} L1262 ${FLOOR} Z`} fill={L.iron[2]} />
         <path d="M660 2330 L860 2318 L866 2346 L664 2356 Z" fill={L.iron[1]} />
         <circle cx={1180} cy={2080} r={110} fill="none" stroke={L.iron[1]} strokeWidth={16} />
-        {[0, 72, 144, 216, 288].map((a) => <line key={a} x1={1180} y1={2080} x2={1180 + 104 * Math.cos((a + 20) * D)} y2={2080 + 104 * Math.sin((a + 20) * D)} stroke={L.iron[1]} strokeWidth={9} />)}
+        {[0, 72, 144, 216, 288].map((a) => <line key={a} x1={1180} y1={2080} x2={1180 + 104 * Math.cos((a + 20) * D + ph * 0.55)} y2={2080 + 104 * Math.sin((a + 20) * D + ph * 0.55)} stroke={L.iron[1]} strokeWidth={9} />)}
         {/* table top */}
         <path d="M690 1556 L1320 1548 L1326 1592 L686 1598 Z" fill={`url(#${pre}wood)`} />
         {/* machine */}
@@ -520,16 +531,16 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
         <path d="M884 1268 L1250 1258 Q1272 1262 1268 1300 L1262 1500 L1196 1500 L1200 1336 L986 1342 L984 1424 L888 1426 Z" fill={`url(#${pre}iron)`} />
         <path d="M900 1290 L1236 1282" stroke={L.wood[0]} strokeWidth={6} opacity={0.8} />
         <path d="M904 1304 L1220 1298" stroke={L.scarf[1]} strokeWidth={3} opacity={0.7} />
-        <rect x={924} y={1424} width={12} height={44} fill={L.cream[1]} />
-        <line x1={930} y1={1468} x2={930} y2={1492} stroke={L.cream[0]} strokeWidth={4} />
+        <rect x={924} y={1424} width={12} height={26 + 26 * bob} fill={L.cream[1]} />
+        <line x1={930} y1={1450 + 26 * bob} x2={930} y2={1468 + 26 * bob} stroke={L.cream[0]} strokeWidth={4} />
         <rect x={1068} y={1206} width={10} height={56} fill={L.iron[2]} />
         <path d="M1046 1214 L1102 1210 L1104 1246 L1048 1250 Z" fill={L.scarf[1]} />
         <path d="M1074 1226 Q1000 1230 962 1290 L934 1426" stroke={L.scarf[0]} strokeWidth={3} fill="none" />
         <circle cx={1288} cy={1316} r={78} fill="none" stroke={`url(#${pre}scarf)`} strokeWidth={16} />
-        {[10, 82, 154, 226, 298].map((a) => <line key={a} x1={1288} y1={1316} x2={1288 + 72 * Math.cos(a * D)} y2={1316 + 72 * Math.sin(a * D)} stroke={L.iron[2]} strokeWidth={9} />)}
+        {[10, 82, 154, 226, 298].map((a) => <line key={a} x1={1288} y1={1316} x2={1288 + 72 * Math.cos(a * D + ph)} y2={1316 + 72 * Math.sin(a * D + ph)} stroke={L.iron[2]} strokeWidth={9} />)}
         <circle cx={1288} cy={1316} r={16} fill={L.iron[0]} />
         {/* shoe being stitched */}
-        <path d="M870 1500 L872 1458 Q896 1446 920 1458 L974 1468 Q1012 1476 1016 1492 L1016 1500 Z" fill={`url(#${pre}box)`} />
+        <path d="M870 1500 L872 1458 Q896 1446 920 1458 L974 1468 Q1012 1476 1016 1492 L1016 1500 Z" fill={`url(#${pre}box)`} transform={`translate(${feed * 0.8} 0)`} />
         <path d="M866 1494 L1020 1494 L1020 1504 L866 1504 Z" fill={L.cream[0]} />
         {/* desk lamp */}
         <path d={`M${LAMP.base[0] - 62} ${LAMP.base[1]} L${LAMP.base[0] + 62} ${LAMP.base[1]} L${LAMP.base[0] + 40} ${LAMP.base[1] - 26} L${LAMP.base[0] - 40} ${LAMP.base[1] - 26} Z`} fill={L.iron[1]} />
@@ -542,7 +553,13 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
 
       {/* boxes */}
       <g filter={`url(#${pre}cut)`}>
-        {Array.from({length: count}).map((_, i) => <Box key={i} c={[STACK_X, FLOOR - BOX_H * (i + 0.5)]} i={i} pre={pre} L={L} />)}
+        {Array.from({length: landed}).map((_, i) => <Box key={i} c={[STACK_X, FLOOR - BOX_H * (i + 0.5)]} i={i} pre={pre} L={L} />)}
+        {anim && anim.fly && (() => {
+          const {i, p} = anim.fly;
+          const s0: P = [1330, 1470], s1: P = [STACK_X, FLOOR - BOX_H * (i + 0.5)];
+          const x = s0[0] + (s1[0] - s0[0]) * p, y = s0[1] + (s1[1] - s0[1]) * p - 170 * Math.sin(Math.PI * p);
+          return <g transform={`rotate(${-20 * (1 - p)} ${x} ${y})`}><Box c={[x, y]} i={i} pre={pre} L={L} /></g>;
+        })()}
       </g>
 
       {/* ===== character ===== */}
@@ -562,6 +579,13 @@ const Panel: React.FC<PanelSpec> = ({n, cam, pose, L, count, lampOn}) => {
           <polygon points={pts([shade[1], shade[2], [1150, 1560], [700, 1560]])} fill={`url(#${pre}cone)`} opacity={0.95} />
           <ellipse cx={920} cy={1540} rx={300} ry={90} fill={`url(#${pre}pool)`} />
           <circle cx={mouthC[0]} cy={mouthC[1]} r={170} fill={`url(#${pre}pool)`} />
+          {anim && Array.from({length: 18}).map((_, k) => {
+            const r1 = Math.abs(Math.sin(k * 91.7)), r2 = Math.abs(Math.sin(k * 37.3)), r3 = Math.abs(Math.sin(k * 13.1));
+            const yy = 1220 + ((r1 * 330 + anim.t * (14 + 20 * r3)) % 330);
+            const spread = (yy - 1200) / 360;
+            const xx = 1000 - spread * 140 + (r2 - 0.5) * 300 * spread + 12 * Math.sin(anim.t * 1.3 + k);
+            return <circle key={k} cx={xx} cy={yy} r={2 + 3 * r3} fill="#ffe6bf" opacity={0.35 + 0.4 * Math.abs(Math.sin(anim.t * 2 + k))} />;
+          })}
         </g>
       )}
       {/* night air: cool falloff away from the lamp */}

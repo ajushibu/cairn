@@ -1,0 +1,9 @@
+# third-party reference video and frames derived from it
+ref/
+analysis/
+# renders and regenerable assets
+out/
+stills/
+final.mp4
+film/node_modules/
+film/public/

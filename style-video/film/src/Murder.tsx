@@ -281,6 +281,38 @@ const Room: React.FC<{pre: string; light: number; moon: number}> = ({pre, light,
   </g>
 );
 
+// ---------------- hand-drawn pass ----------------
+// Ink lines from colour edges (pressure ~ contrast), boiling wobble on twos,
+// ragged edges and a faint brush streak in the fills.
+export const HandDrawn: React.FC<{id: string; seed: number; ink?: number}> = ({id, seed, ink = 1}) => (
+  <filter id={id} x={-40} y={-40} width={1160} height={2000} filterUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency={0.03} numOctaves={2} seed={seed} result="n1" />
+    <feDisplacementMap in="SourceGraphic" in2="n1" scale={7} xChannelSelector="R" yChannelSelector="G" result="wob" />
+    <feTurbulence type="fractalNoise" baseFrequency={0.45} numOctaves={1} seed={seed + 11} result="n2" />
+    <feDisplacementMap in="wob" in2="n2" scale={3} xChannelSelector="G" yChannelSelector="R" result="rough" />
+    <feTurbulence type="fractalNoise" baseFrequency="0.7 0.035" numOctaves={2} seed={seed + 23} result="str" />
+    <feColorMatrix in="str" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.42 0 0 0 -0.16" result="strA" />
+    <feFlood floodColor="#2a1c1c" result="strC" />
+    <feComposite in="strC" in2="strA" operator="in" result="streak" />
+    <feComposite in="streak" in2="rough" operator="in" result="streakIn" />
+    <feGaussianBlur in="wob" stdDeviation={1.1} result="wobS" />
+    <feColorMatrix in="wobS" type="matrix" values="0.3 0.59 0.11 0 0  0.3 0.59 0.11 0 0  0.3 0.59 0.11 0 0  0 0 0 1 0" result="lum" />
+    <feConvolveMatrix in="lum" order={3} kernelMatrix="-1 -1 -1 -1 8 -1 -1 -1 -1" preserveAlpha="true" result="e1" />
+    <feConvolveMatrix in="lum" order={3} kernelMatrix="1 1 1 1 -8 1 1 1 1" preserveAlpha="true" result="e2" />
+    <feComposite in="e1" in2="e2" operator="arithmetic" k2={1} k3={1} result="edge" />
+    <feColorMatrix in="edge" type="matrix" values={`0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${7 * ink} 0 0 0 -0.3`} result="emask" />
+    <feMorphology in="emask" operator="dilate" radius={1} result="thick" />
+    <feGaussianBlur in="thick" stdDeviation={0.7} result="soft" />
+    <feFlood floodColor="#160f12" floodOpacity={0.88} result="inkC" />
+    <feComposite in="inkC" in2="soft" operator="in" result="lines" />
+    <feMerge>
+      <feMergeNode in="rough" />
+      <feMergeNode in="streakIn" />
+      <feMergeNode in="lines" />
+    </feMerge>
+  </filter>
+);
+
 // ---------------- the film ----------------
 export const Murder: React.FC = () => {
   const frame = useCurrentFrame();
@@ -297,6 +329,7 @@ export const Murder: React.FC = () => {
   const defs = (
     <defs>
       <Grads pre={pre} />
+      <HandDrawn id={pre + 'hand'} seed={Math.floor(af / 2) % 6} />
       <radialGradient id={pre + 'pool'}>
         <stop offset="0" stopColor="#ffb766" stopOpacity={0.7} /><stop offset="0.5" stopColor="#da603a" stopOpacity={0.22} /><stop offset="1" stopColor="#da603a" stopOpacity={0} />
       </radialGradient>
@@ -437,7 +470,7 @@ export const Murder: React.FC = () => {
     <AbsoluteFill style={{backgroundColor: '#05090c'}}>
       <svg width={1080} height={1920} viewBox="0 0 1080 1920">
         {defs}
-        {body}
+        <g filter={`url(#${pre}hand)`}>{body}</g>
       </svg>
       <Img src={staticFile('mottle.png')} style={{position: 'absolute', inset: 0, width: 1080, height: 1920, mixBlendMode: 'soft-light', opacity: 0.3}} />
       <AbsoluteFill style={{background: 'radial-gradient(ellipse 75% 60% at 50% 48%, rgba(5,9,12,0) 48%, rgba(5,9,12,0.4) 80%, rgba(5,9,12,0.78) 100%)'}} />

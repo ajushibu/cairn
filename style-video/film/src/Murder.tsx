@@ -478,3 +478,5 @@ export const Murder: React.FC = () => {
     </AbsoluteFill>
   );
 };
+
+export {Head as MHead, Grads, M, INK};
